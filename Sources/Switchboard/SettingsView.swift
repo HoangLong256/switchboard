@@ -52,6 +52,13 @@ struct SettingsView: View {
             }
 
             Section {
+                LabeledContent("Handover") { HandoverSetupButton() }
+            } footer: {
+                Text("Claude keeps a short status note for each session with switchboard-task: the task, whether it is blocked, and what is left. The Handover tab and the session's row show it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 LabeledContent("Theme") {
                     HStack(spacing: 10) {
                         ThemeSwatches(palette: editorTheme.palette(dark: scheme == .dark))

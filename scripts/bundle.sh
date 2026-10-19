@@ -11,7 +11,7 @@ BIN="$(swift build -c release --show-bin-path)"
 if [ "${UNIVERSAL:-}" = "1" ]; then
     for arch in arm64 x86_64; do swift build -c release --triple "$arch-apple-macosx14.0"; done
     FAT="$(mktemp -d)"
-    for exe in Switchboard switchboard-statusline; do
+    for exe in Switchboard switchboard-statusline switchboard-task; do
         lipo -create -output "$FAT/$exe" .build/arm64-apple-macosx/release/$exe .build/x86_64-apple-macosx/release/$exe
     done
 fi
@@ -21,6 +21,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "${FAT:-$BIN}/Switchboard" "$APP/Contents/MacOS/Switchboard"
 # status line helper; the app copies it to ~/.switchboard/bin when you set up the live status line
 cp "${FAT:-$BIN}/switchboard-statusline" "$APP/Contents/MacOS/switchboard-statusline"
+# handover helper; the app copies it to ~/.switchboard/bin when you set up the handover
+cp "${FAT:-$BIN}/switchboard-task" "$APP/Contents/MacOS/switchboard-task"
 # SwiftPM resource bundles (SwiftTerm's shaders): SwiftTerm also looks in Contents/Resources, which keeps
 # the app's root clean so the whole bundle can be signed
 for b in "$BIN"/*.bundle; do [ -e "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done

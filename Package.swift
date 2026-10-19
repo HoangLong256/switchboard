@@ -22,6 +22,8 @@ let package = Package(
         // Claude Code agent teams from ~/.claude/teams and ~/.claude/tasks (no UI, tested)
         .target(name: "TeamKit"),
         .executableTarget(name: "switchboard-statusline", dependencies: ["StatusLineKit"]),
+        // Lets Claude keep its session's handover (~/.claude/handover/<session>.md), shown in the Handover tab
+        .executableTarget(name: "switchboard-task", dependencies: ["SessionCore"]),
         .executableTarget(
             name: "Switchboard",
             dependencies: [

@@ -4,6 +4,7 @@ This document tells you how to use Switchboard. For installation, see the [READM
 
 - [Sessions](#sessions)
 - [Session tabs](#session-tabs)
+- [Handover](#handover)
 - [Sessions from other apps](#sessions-from-other-apps)
 - [Folder sidebar](#folder-sidebar)
 - [Source Control](#source-control)
@@ -67,11 +68,62 @@ line, the model comes from the last response in the transcript.
 | Terminal | The real terminal of the session, from the tmux server of Switchboard (`tmux -L switchboard`). |
 | Editor | The files that you open from the folder sidebar. |
 | Team | The agent team of the session, if it has one. |
-| Handover | The file `~/.claude/handover/<name>.md`, as formatted text. |
+| Handover | The status note of the session: its task, its state and what is left. See [Handover](#handover). |
 | Notes | Your notes for the session. Switchboard keeps them in `~/.switchboard/notes`. |
 | Info | The folder, branch, PID, context, usage and the last messages. |
 
 ![The Info tab of a session that needs you, with sessions in groups by status (GitHub Light theme)](images/session-info.png)
+
+## Handover
+
+A handover is a short status note for each session. Claude writes it with the `switchboard-task` command.
+Switchboard shows it in three places:
+
+- The **Handover** tab shows the note.
+- The session row shows the task.
+- An offline session with a handover stays in the list. You can resume it.
+
+### Set up the handover
+
+1. Open the **Handover** tab of a session, or open Settings (⌘,).
+2. Click **Set Up Handover…**.
+3. Click **Set Up**.
+
+Switchboard then does these steps:
+
+1. It copies `switchboard-task` to `~/.switchboard/bin`.
+2. It adds a short section to `~/.claude/CLAUDE.md`. The section tells Claude when to write the handover.
+3. It adds a rule to `~/.claude/settings.json`. The rule lets Claude run the command without a question.
+
+Switchboard makes a backup of each file first. New sessions use the handover. A running session uses it
+after `/clear` or a restart.
+
+To remove the setup, click **Turn Off Handover**. The handovers that exist stay.
+
+### States
+
+| State | Result in Switchboard |
+|---|---|
+| `working` | The session row shows the task. |
+| `blocked` | The session moves to the top as "needs you". |
+| `waiting` | The session row shows "awaiting feedback". |
+| `done` | The session row shows the task. |
+
+### The command
+
+Claude runs the command. You can also run it in the terminal of a session. The command is in
+`~/.switchboard/bin`, so type `~/.switchboard/bin/switchboard-task` or add that folder to your `PATH`.
+
+```sh
+switchboard-task "Retry failed webhooks"                       # start a new task
+switchboard-task --state blocked --detail "Retry forever?"     # ask for a decision
+switchboard-task --state done --body "Added backoff. Left: the retry limit."
+switchboard-task --note "Ask about the retry limit"            # add an entry to the notes
+switchboard-task --show                                        # show the handover
+```
+
+The command finds its session from the Claude Code process that runs it. Use `--name <session>` to select a
+different session. The handover is in `~/.claude/handover/<session>.md`.
 
 ## Sessions from other apps
 

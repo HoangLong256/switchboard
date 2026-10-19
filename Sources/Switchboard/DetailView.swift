@@ -274,8 +274,15 @@ struct HandoverTab: View {
                         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                ContentUnavailableView("No handover", systemImage: "arrow.triangle.swap",
-                                       description: Text("A session writes one with `/handover`; it lives in ~/.claude/handover/\(name).md."))
+                ContentUnavailableView {
+                    Label("No handover yet", systemImage: "arrow.triangle.swap")
+                } description: {
+                    Text(HandoverInstall.isInstalled
+                         ? "Claude writes one here when it starts a task, needs a decision, or finishes. It lives in ~/.claude/handover/\(name).md."
+                         : "A handover is a short status note: the current task, whether it is blocked, and what is left. Set it up and Claude keeps one for each session.")
+                } actions: {
+                    HandoverSetupButton()
+                }
             }
         }
         .onAppear(perform: load)
@@ -285,6 +292,44 @@ struct HandoverTab: View {
     private func load() {
         let t = Handover.body(name, dir: "\(StateBuilder.defaultClaudeHome)/handover")
         if t != text { text = t }
+    }
+}
+
+/// "Set Up Handover…" with what it changes, or "Turn Off Handover" once it is set up.
+struct HandoverSetupButton: View {
+    @State private var installed = HandoverInstall.isInstalled
+    @State private var confirm = false
+    @State private var error: String?
+
+    var body: some View {
+        Group {
+            if installed {
+                Button("Turn Off Handover", role: .destructive) { confirm = true }
+                    .help("Remove the Switchboard section from ~/.claude/CLAUDE.md and the permission rule")
+            } else {
+                Button { confirm = true } label: { Label("Set Up Handover…", systemImage: "arrow.triangle.swap") }
+                    .help("Let Claude keep a handover for each session")
+            }
+        }
+        .onAppear { installed = HandoverInstall.isInstalled }
+        .alert("Handover", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: {
+            Text(error ?? "")
+        }
+        .confirmationDialog(installed ? "Turn off the handover?" : "Set up the handover?", isPresented: $confirm) {
+            Button(installed ? "Turn Off" : "Set Up") { run() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(installed
+                 ? "Switchboard removes its section from ~/.claude/CLAUDE.md and its permission rule from ~/.claude/settings.json. Existing handovers stay."
+                 : "Switchboard copies switchboard-task to ~/.switchboard/bin. Then it adds a short section to ~/.claude/CLAUDE.md that tells Claude to keep its handover, and a rule to ~/.claude/settings.json so the command runs without asking. Both files are backed up first. New sessions use it; running sessions after /clear or a restart.")
+        }
+    }
+
+    private func run() {
+        error = installed ? HandoverInstall.uninstall() : HandoverInstall.install()
+        installed = HandoverInstall.isInstalled
     }
 }
 

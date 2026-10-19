@@ -14,8 +14,11 @@ network: `Sources/` contains no `URLSession` and no other network calls.
 
 - `~/.switchboard`: notes and status line data.
 - The files that you save in the editor.
-- `~/.claude/settings.json`: only when you select *Set Up Live Status Line…*. Switchboard asks first and makes a
-  backup.
+- `~/.claude/settings.json`: only when you select *Set Up Live Status Line…* or *Set Up Handover…*. Switchboard
+  asks first and makes a backup.
+- `~/.claude/CLAUDE.md`: only when you select *Set Up Handover…*. Switchboard adds one marked section and makes a
+  backup. *Turn Off Handover* removes the section.
+- `~/.claude/handover/<session>.md`: Claude writes these files with `switchboard-task`.
 
 ## Programs that Switchboard runs
 

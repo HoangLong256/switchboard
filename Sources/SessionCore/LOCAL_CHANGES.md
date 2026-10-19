@@ -13,4 +13,8 @@ commit in `UPSTREAM_COMMIT`). Changes since:
   pane id only matches when the tmux session name agrees (pane ids restart at %0 on every tmux server).
 - `Transcript.swift`, `StateBuilder.swift`, `UsageLimit.swift`: `LimitHit` (the conversation stopped at a usage
   limit) and its reset time, for continuing sessions when the limit resets.
+- `HandoverFile.swift` (new): writes handover files for `switchboard-task` (replaces upstream's `cc-task`), finds
+  the session a command runs in from its parent processes, and `HandoverSetup` for the CLAUDE.md section and
+  the permission rule.
+- `ModelName.swift`, `SessionGroups.swift`, `MoveIn.swift` (new): short model names, grouping, moving sessions in.
 - Comments and identifiers no longer refer to the upstream app.

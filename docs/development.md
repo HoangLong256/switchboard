@@ -34,7 +34,7 @@ swift run Switchboard
 | Location or variable | Purpose |
 |---|---|
 | `~/.switchboard` | The data of Switchboard: status line output, notes, `bin/switchboard-statusline` |
-| `~/.claude` | The data of Claude Code. Switchboard only reads it, with one exception: *Set Up Live Status Line…* changes `settings.json`. |
+| `~/.claude` | The data of Claude Code. Switchboard only reads it. Exceptions: *Set Up Live Status Line…* and *Set Up Handover…* change `settings.json`, and *Set Up Handover…* adds a section to `CLAUDE.md`. |
 | `SWITCHBOARD_TMUX` | The name of the tmux server. The default is `switchboard`. |
 | `SWITCHBOARD_DATA` | A different folder for `~/.switchboard` |
 | `SWITCHBOARD_HOME` | A different home folder that contains `.claude`, for tests |
@@ -53,6 +53,7 @@ interface. Each of these modules has a test target.
 | `TeamKit` | Agent teams from `~/.claude/teams` and `~/.claude/tasks` |
 | `StatusLineKit` | The data that the status line command keeps for the app |
 | `switchboard-statusline` | The status line command that Claude Code runs |
+| `switchboard-task` | The handover command that Claude runs in a session |
 
 Dependencies:
 
