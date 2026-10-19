@@ -191,7 +191,10 @@ Right-click a tab, or click **…** at the end of the tab bar. Then select one o
 
 - Binary files, files with an unusual encoding and very large files show a notice. Click **Open Anyway** to
   open them.
-- Markdown files have a preview. Images show directly.
+- Markdown files have a preview.
+- Images show directly. Animated GIFs play. Large images become smaller to fit the window. Click **Actual
+  Size** to show all pixels.
+- Below an image, a line shows its size and type, for example "480 × 270 · GIF · 36 frames".
 - Code has syntax colors for comments, strings, numbers, keywords, types and calls.
 
 ### Give a file to Claude

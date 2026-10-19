@@ -225,11 +225,7 @@ struct DocumentView: View {
     @ViewBuilder
     private var content: some View {
         if model.isImage {
-            if let img = NSImage(contentsOfFile: model.path) {
-                ScrollView([.horizontal, .vertical]) { Image(nsImage: img).padding(20) }
-            } else {
-                placeholder("photo", "Can't show this image.", anyway: false)
-            }
+            ImagePreview(path: model.path)
         } else {
             switch model.doc.load {
             case .text:
