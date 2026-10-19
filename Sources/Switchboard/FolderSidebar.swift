@@ -17,6 +17,8 @@ struct FolderSidebar: View {
     /// worktree picked per session instead of its own folder
     @State private var worktreeOf: [String: String] = [:]
     @AppStorage("sidebarMode") private var mode: SidebarMode = .explorer
+    /// turns of the refresh button
+    @State private var spins = 0
 
     enum SidebarMode: String { case explorer, sourceControl }
 
@@ -34,16 +36,44 @@ struct FolderSidebar: View {
         .frame(minWidth: 220)
         // re-run when the selection or its folder changes (the folder may only be known after the first refresh)
         .task(id: "\(store.selected ?? "")|\(store.selectedRow.flatMap(store.folder) ?? "")") { await follow() }
-        .toolbar {
-            ToolbarItemGroup {
-                Toggle(isOn: $model.showHidden) { Label("Hidden Files", systemImage: "eye") }
-                    .help("Show hidden files")
+        .toolbar { toolbarButtons }
+    }
+
+    /// The buttons above the column, for what it shows: the tree (hidden files, collapse, refresh) or the changes
+    /// (stage all, refresh). Their tooltips come from `ToolbarTips`, by label.
+    @ToolbarContentBuilder
+    private var toolbarButtons: some ToolbarContent {
+        ToolbarItemGroup {
+            if mode == .sourceControl && model.root != nil {
+                Button { model.stage(model.changes.unstaged) } label: { Label("Stage All Changes", systemImage: "plus") }
+                    .disabled(model.changes.unstaged.isEmpty)
+                refreshButton("Refresh Changes")
+            } else {
+                // a fixed label (the tooltip goes by it); the icon and the toggle's highlight show the state
+                Toggle(isOn: $model.showHidden) {
+                    Label("Hidden Files", systemImage: model.showHidden ? "eye" : "eye.slash")
+                }
+                .disabled(model.root == nil)
                 Button { model.collapseAll() } label: { Label("Collapse All", systemImage: "arrow.down.right.and.arrow.up.left") }
-                    .help("Collapse all folders")
-                Button { model.reloadAll() } label: { Label("Reload", systemImage: "arrow.clockwise") }
-                    .help("Reload the folder")
+                    .disabled(model.root == nil || model.expanded.isEmpty)
+                refreshButton("Refresh Explorer")
             }
         }
+    }
+
+    /// Turns once when clicked, so a refresh that finds nothing new still shows it happened.
+    private func refreshButton(_ title: String) -> some View {
+        Button {
+            model.reloadAll()
+            withAnimation(.easeInOut(duration: 0.5)) { spins += 1 }
+        } label: {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: "arrow.clockwise").rotationEffect(.degrees(Double(spins) * 360))
+            }
+        }
+        .disabled(model.root == nil)
     }
 
     /// Explorer | Source Control, like VS Code's activity bar; Source Control shows how many files changed.

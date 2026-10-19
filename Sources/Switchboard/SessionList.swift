@@ -55,11 +55,9 @@ struct SessionList: View {
                 } label: {
                     Label("Group By", systemImage: "rectangle.3.group")
                 }
-                .help("Group sessions by parent folder or status")
             }
             ToolbarItem {
                 Button { store.newSessionOpen = true } label: { Label("New Session", systemImage: "plus") }
-                    .help("New Session (⌘N)")
             }
         }
         .confirmationDialog("Close \(confirmClose?.name ?? "")?", isPresented: Binding(

@@ -189,6 +189,7 @@ struct ContentView: View {
             DetailView()
         }
         .tint(theme.themesApp ? Color(hex: theme.palette(dark: true).accent) : nil)
+        .background(ToolbarTipsInstaller())
         .onChange(of: theme) { AppSettings.shared.applyAppearance() }
         .navigationTitle("Switchboard")
         // the session's name is in the header; the toolbar stays clean
