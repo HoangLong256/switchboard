@@ -50,6 +50,15 @@ public struct ScreenDialog: Equatable, Sendable {
         return ScreenDialog(options: block, context: Array(context))
     }
 
+    /// A choice without numbers at the bottom of the screen (e.g. the folder trust prompt: "❯ No, exit" /
+    /// "Yes, I trust this folder" over "Enter to confirm · Esc to cancel"). Typed text plus Enter would confirm
+    /// the highlighted choice, so nothing may be typed while it is open.
+    public static func hasOpenPrompt(_ screen: String) -> Bool {
+        let tail = screen.components(separatedBy: "\n").map(stripBorder).filter { !$0.isEmpty }.suffix(12)
+        return tail.contains { $0.contains("Enter to confirm") || $0.contains("Esc to cancel") }
+            && tail.contains { $0.hasPrefix("❯ ") && !$0.dropFirst(2).isEmpty }
+    }
+
     /// Strips the "│ … │" border of old dialogs, and surrounding whitespace.
     static func stripBorder(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespaces)

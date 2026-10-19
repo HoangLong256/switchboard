@@ -4,6 +4,7 @@ This document tells you how to use Switchboard. For installation, see the [READM
 
 - [Sessions](#sessions)
 - [Session tabs](#session-tabs)
+- [Answer a session](#answer-a-session)
 - [Info tab](#info-tab)
 - [Subagents](#subagents)
 - [Handover](#handover)
@@ -78,6 +79,20 @@ line, the model comes from the last response in the transcript.
 | Handover | The status note of the session: its task, its state and what is left. See [Handover](#handover). |
 | Notes | Your notes for the session. Switchboard keeps them in `~/.switchboard/notes`. |
 | Info | The state of the session, the conversation, context and cost, tokens and details. See [Info tab](#info-tab). |
+
+### Answer a session
+
+When a session needs you, you can answer it from the Info tab. You do not have to open the terminal.
+
+- If Claude asks for a permission or shows choices, the choices show as buttons. Click one. Switchboard presses
+  its number in the session.
+- If Claude asks a question, type your reply in the field. Then click **Send** or press **⌘↩**.
+
+Switchboard reads the screen again before it sends an answer. If the prompt changed, it sends nothing and tells
+you. A prompt without numbers, for example the folder trust prompt, shows a note: answer it in the terminal.
+
+Notifications have the same answers. A permission notification has **Allow**, **Always Allow** and **Deny**. A
+question notification has **Reply**. These answers need the Switchboard app from the release, not a debug build.
 
 ### Info tab
 
