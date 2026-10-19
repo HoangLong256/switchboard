@@ -144,6 +144,11 @@ struct SessionList: View {
                 if on && !AppSettings.shared.autoContinue { AppSettings.shared.autoContinue = true }
                 AppSettings.shared.setContinues(r.name, on)
             }))
+        if store.canMoveIn(r) {
+            Divider()
+            Button(r.session.alive ? "Move into Switchboard…" : "Resume in Switchboard") { store.requestMoveIn(r) }
+                .disabled(store.moving.contains(r.name))
+        }
         if let t = r.tmux {
             Button("Copy Attach Command") {
                 NSPasteboard.general.clearContents()

@@ -37,3 +37,33 @@ final class SuggestedNameTests: XCTestCase {
         XCTAssertEqual(Notes.suggestedName(folder: "/x/日本", taken: []), "")
     }
 }
+
+final class MoveInTests: XCTestCase {
+    func testResumeCommandQuotes() {
+        XCTAssertEqual(MoveIn.resumeCommand(name: "blog.01", sessionId: "6ac10705-aa"), "claude --resume 6ac10705-aa -n blog.01")
+        XCTAssertEqual(MoveIn.resumeCommand(name: "my app", sessionId: "x"), "claude --resume x -n 'my app'")
+    }
+
+    func testDisplayNameDropsRegistrySuffixes() {
+        XCTAssertEqual(MoveIn.displayName("api#4242", folder: "/x/api", taken: []), "api")
+        XCTAssertEqual(MoveIn.displayName("pid-77042", folder: "/x/Front End", taken: []), "front-end")
+        XCTAssertEqual(MoveIn.displayName("c#sharp", folder: "/x", taken: []), "c#sharp")
+        XCTAssertEqual(MoveIn.displayName("frontend-monorepo-07", folder: "/x", taken: []), "frontend-monorepo-07")
+    }
+
+    func testTmuxNameIsFreeAndHasNoColon() {
+        XCTAssertEqual(MoveIn.tmuxName("a:b", taken: []), "a-b")
+        XCTAssertEqual(MoveIn.tmuxName("api", taken: ["api", "api-2"]), "api-3")
+    }
+
+    func testAppNameFromExecutablePath() {
+        XCTAssertEqual(MoveIn.appName(fromPath: "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper"), "Visual Studio Code")
+        XCTAssertEqual(MoveIn.appName(fromPath: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"), "Terminal")
+        XCTAssertNil(MoveIn.appName(fromPath: "/bin/zsh"))
+    }
+
+    func testHostAppOfThisProcessDoesNotCrash() {
+        _ = MoveIn.hostApp(of: Int(getpid()))
+        XCTAssertNil(MoveIn.hostApp(of: 1))
+    }
+}

@@ -29,7 +29,7 @@ public enum SessionControl {
     /// Start line for a session in tmux.
     public static func claudeCommand(_ name: String) -> String { "claude -n \(shellQuote(name))" }
 
-    static func shellQuote(_ s: String) -> String {
+    public static func shellQuote(_ s: String) -> String {
         let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-+/:@%"))
         if !s.isEmpty, s.unicodeScalars.allSatisfy(safe.contains) { return s }
         return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"

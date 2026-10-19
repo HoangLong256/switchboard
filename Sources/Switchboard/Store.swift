@@ -62,6 +62,10 @@ final class Store: ObservableObject {
     }()
     @Published private(set) var favorites: [String] = UserDefaults.standard.stringArray(forKey: "favorites") ?? []
     @Published var newSessionOpen = false
+    /// a session asked to move into Switchboard (confirmed in a dialog)
+    @Published var moveRequest: Row?
+    /// names of sessions being moved in right now
+    @Published private(set) var moving: Set<String> = []
     @Published var notice: String?
     /// Increment to make the terminal grab keyboard focus
     @Published private(set) var focusRequest = 0
@@ -197,16 +201,83 @@ final class Store: ObservableObject {
         focusTerminal()
     }
 
-    func startSession(name: String, folder: String, agentTeam: Bool = false, start: Bool = true) async {
+    func startSession(name: String, folder: String, agentTeam: Bool = false, start: Bool = true,
+                      command: String? = nil) async {
         let env = AppSettings.shared.newSessionEnvironment
         let err = await Task.detached {
-            Tmux.newSession(name: name, dir: folder, agentTeam: agentTeam, environment: env, start: start)
+            Tmux.newSession(name: name, dir: folder, agentTeam: agentTeam, environment: env, start: start, command: command)
         }.value
         if let err { notice = err; return }
         await refresh()
         selected = name
         terminalEpoch += 1
         focusTerminal()
+    }
+
+    // MARK: Moving a session in
+
+    /// A session Switchboard can bring into its tmux: one running elsewhere (another terminal app), or an offline one.
+    func canMoveIn(_ row: Row) -> Bool {
+        row.tmux == nil && row.session.status != "shell" && row.session.kind != "bg"
+    }
+
+    /// A running session asks first (it ends where it runs); an offline one resumes right away.
+    func requestMoveIn(_ row: Row) {
+        guard canMoveIn(row) else { return }
+        if row.session.alive { moveRequest = row } else { Task { await moveIn(row) } }
+    }
+
+    /// Ends the session where it runs (as closing its terminal window would) and continues the same conversation
+    /// in a new tmux session here with `claude --resume`. An offline session just resumes.
+    func moveIn(_ row: Row) async {
+        let name = row.name
+        guard canMoveIn(row), !moving.contains(name) else { return }
+        moving.insert(name)
+        defer { moving.remove(name) }
+
+        var sessionId = row.session.sessionId
+        var folder = row.session.cwd.flatMap { $0.isEmpty ? nil : $0 }
+        if sessionId == nil || folder == nil {
+            // offline with only a handover: find its newest transcript
+            guard let t = await Task.detached(operation: { SessionFolder.transcript(name) }).value else {
+                notice = "Couldn't find the conversation of “\(name)” in ~/.claude/projects, so it can't be resumed."
+                return
+            }
+            sessionId = sessionId ?? t.sessionId
+            folder = folder ?? t.cwd
+        }
+        guard let sessionId, let folder else { return }
+
+        if row.session.alive, let pid = row.session.pid {
+            let ended = await Task.detached { await Self.end(pid) }.value
+            guard ended else {
+                notice = "“\(name)” is still running (pid \(pid)). Quit it in its window with /exit, then try again."
+                return
+            }
+        }
+        let tmuxNames = Set(rows.compactMap(\.tmux))
+        let display = MoveIn.displayName(name, folder: folder, taken: Set(rows.map(\.name)))
+        let tmux = MoveIn.tmuxName(display, taken: tmuxNames)
+        await startSession(name: tmux, folder: folder, command: MoveIn.resumeCommand(name: display, sessionId: sessionId))
+        // once Claude registers, the row goes by the session's name rather than the tmux session's
+        _ = await SessionControl.waitUntil(timeout: 15, interval: 0.5) { [weak self] in
+            guard let self else { return true }
+            await self.refresh()
+            guard let r = self.rows.first(where: { $0.tmux == tmux && $0.session.alive }) else { return false }
+            if self.selected == tmux { self.selected = r.name }
+            return true
+        }
+    }
+
+    /// SIGHUP (the terminal went away), then SIGTERM; true once the process is gone.
+    nonisolated private static func end(_ pid: Int) async -> Bool {
+        let p = pid_t(truncatingIfNeeded: pid)
+        for signal in [SIGHUP, SIGTERM] {
+            kill(p, signal)
+            let gone = await SessionControl.waitUntil(timeout: 5, interval: 0.2) { !Registry.isAlive(pid) }
+            if gone { return true }
+        }
+        return false
     }
 
     /// Types `text` into the selected session's terminal, without Enter.

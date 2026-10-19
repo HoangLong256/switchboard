@@ -199,6 +199,21 @@ struct ContentView: View {
         } message: {
             Text(store.notice ?? "")
         }
+        .confirmationDialog("Move “\(store.moveRequest?.name ?? "")” into Switchboard?",
+                            isPresented: Binding(get: { store.moveRequest != nil }, set: { if !$0 { store.moveRequest = nil } }),
+                            presenting: store.moveRequest) { row in
+            Button("Move") { Task { await store.moveIn(row) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { row in
+            Text(moveMessage(row))
+        }
+    }
+
+    private func moveMessage(_ row: Row) -> String {
+        let app = row.session.pid.flatMap(MoveIn.hostApp(of:)) ?? "its terminal"
+        var m = "It ends in \(app), and the same conversation continues here in a new terminal (claude --resume)."
+        if row.session.status == "busy" { m += " It is still working: the current step stops." }
+        return m
     }
 }
 

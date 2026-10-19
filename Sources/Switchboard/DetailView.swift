@@ -218,12 +218,45 @@ struct TerminalTab: View {
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(Color(hex: theme.palette(dark: scheme == .dark).background))
         } else if row.session.alive {
-            ContentUnavailableView("Runs outside Switchboard", systemImage: "macwindow",
-                                   description: Text("This session has no tmux session on `-L \(Tmux.socket)`, so its terminal can't be shown here. Its files, handover and notes still work."))
+            let app = row.session.pid.flatMap(MoveIn.hostApp(of:))
+            ContentUnavailableView {
+                Label(app.map { "Runs in \($0)" } ?? "Runs outside Switchboard", systemImage: "macwindow")
+            } description: {
+                Text("Its terminal belongs to \(app ?? "another app"), so it can't be shown here. Move it in to continue the same conversation in Switchboard's terminal; it ends there.")
+            } actions: {
+                moveButton("Move into Switchboard…", "arrow.down.right.and.arrow.up.left")
+            }
         } else if row.session.hasHandover {
-            HandoverTab(name: row.name)
+            VStack(spacing: 0) {
+                HStack {
+                    Label("Offline", systemImage: "moon.zzz").foregroundStyle(.secondary)
+                    Spacer()
+                    moveButton("Resume in Switchboard", "play.fill")
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                Divider()
+                HandoverTab(name: row.name)
+            }
         } else {
-            ContentUnavailableView("Offline", systemImage: "moon.zzz", description: Text("No terminal and no handover."))
+            ContentUnavailableView {
+                Label("Offline", systemImage: "moon.zzz")
+            } description: {
+                Text("No terminal and no handover.")
+            } actions: {
+                moveButton("Resume in Switchboard", "play.fill")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func moveButton(_ title: String, _ symbol: String) -> some View {
+        if store.canMoveIn(row) {
+            let busy = store.moving.contains(row.name)
+            Button { store.requestMoveIn(row) } label: {
+                Label(busy ? "Moving…" : title, systemImage: symbol)
+            }
+            .disabled(busy)
+            .help("Continues the conversation here with claude --resume")
         }
     }
 }

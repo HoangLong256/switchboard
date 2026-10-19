@@ -25,6 +25,10 @@ Claude Code's **agent teams**.
   - **Grouping**: group the sessions by parent folder (the folder their working folder is in, e.g. all
     sessions under `~/Workplace/Personal Projects`) or by status (the group button in the toolbar, or Settings).
     Each group is a section you can fold, with its size and how many sessions need you.
+  - **Sessions started elsewhere** (in VS Code, iTerm or Terminal) are listed too, but their terminal belongs to
+    that app. **Move into Switchboard…** (in the Terminal tab or the row's context menu) ends the session there,
+    as closing its window would, and continues the same conversation in Switchboard's terminal
+    (`claude --resume <id>`). Offline sessions have **Resume in Switchboard**.
   - The model and effort the selected session runs with ("Opus 5.5 · High") show next to its tabs; click for
     context and cost. They come from the live status line, else the model of the transcript's last response.
 - **Folder sidebar**: the selected session's working directory as a tree.

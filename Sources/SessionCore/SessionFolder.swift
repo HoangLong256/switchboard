@@ -6,6 +6,13 @@ import Foundation
 public enum SessionFolder {
     public static func find(_ name: String, projectsDir: String = "\(StateBuilder.defaultClaudeHome)/projects",
                             maxAge: TimeInterval = 90 * 86_400, now: Date = Date()) -> String? {
+        transcript(name, projectsDir: projectsDir, maxAge: maxAge, now: now)?.cwd
+    }
+
+    /// The session's newest transcript: the folder it was started in and its session id (the file's name), for
+    /// `claude --resume`.
+    public static func transcript(_ name: String, projectsDir: String = "\(StateBuilder.defaultClaudeHome)/projects",
+                                  maxAge: TimeInterval = 90 * 86_400, now: Date = Date()) -> (cwd: String, sessionId: String)? {
         let fm = FileManager.default
         var files: [(path: String, date: Date)] = []
         for dir in (try? fm.contentsOfDirectory(atPath: projectsDir)) ?? [] {
@@ -21,7 +28,9 @@ public enum SessionFolder {
             guard let tail = read(f.path, fromEnd: true), last(#""customTitle":"([^"]*)""#, in: tail) == name,
                   let head = read(f.path, fromEnd: false), let cwd = first(#""cwd":"([^"]*)""#, in: head) else { continue }
             var isDir: ObjCBool = false
-            if fm.fileExists(atPath: cwd, isDirectory: &isDir), isDir.boolValue { return cwd }
+            if fm.fileExists(atPath: cwd, isDirectory: &isDir), isDir.boolValue {
+                return (cwd, ((f.path as NSString).lastPathComponent as NSString).deletingPathExtension)
+            }
         }
         return nil
     }
