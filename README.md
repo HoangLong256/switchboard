@@ -76,7 +76,20 @@ Claude Code's **agent teams**.
 Shortcuts: ⌘N new session · ⇧⌘H next waiting session · ⌘J focus terminal · ⌘1–6 tabs · ⌘S / ⌥⌘S save ·
 ⌘W close editor · ⌘D favorite · ⌘R refresh · ⌘, settings.
 
-## Run
+## Download
+
+1. Get `Switchboard-<version>.dmg` from [Releases](../../releases/latest). It runs on Apple silicon and Intel, macOS 14+.
+2. Open it and drag Switchboard to Applications.
+3. The first time only: macOS blocks the app because it isn't signed with an Apple Developer ID. Open it once,
+   choose Done, then go to System Settings → Privacy & Security and click **Open Anyway**. You can also run
+   `xattr -dr com.apple.quarantine /Applications/Switchboard.app` in Terminal instead.
+
+It needs `brew install tmux` and Claude Code (`claude`) on the Mac.
+
+New versions: `git tag v0.2.0 && git push --tags` builds the app on GitHub Actions and attaches it to a release
+(`sh scripts/release.sh` makes the same .dmg and .zip locally, in `dist/`).
+
+## Run from source
 
 Needs macOS 14+, Xcode or the Swift toolchain, and `brew install tmux`.
 

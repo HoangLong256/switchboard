@@ -1,0 +1,22 @@
+# Push a tag like v0.2.0 to build Switchboard and attach the .dmg and .zip to a GitHub release.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: VERSION="${GITHUB_REF_NAME#v}" sh scripts/release.sh
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Switchboard $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dist/Switchboard-*.dmg dist/Switchboard-*.zip --clobber
