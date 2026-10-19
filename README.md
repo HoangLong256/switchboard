@@ -16,17 +16,7 @@ built as a Swift package; everything stays on your machine.
 > Switchboard is an independent open source project. It is not affiliated with or endorsed by Anthropic.
 > Claude and Claude Code are Anthropic's products; you bring your own Claude Code install and account.
 
-<!-- screenshot: docs/screenshot.png (not yet in the repo; the sketch below stands in for it) -->
-
-```
-┌ Sessions ─────────┬ Folder ───────────┬ Terminal │ Editor │ Team │ Handover │ Notes │ Info ┐
-│ ● shop.lead       │ switchboard ⑂ main│                                                    │
-│    ● api  working │ ▸ Sources       • │   tmux terminal, open files as tabs (preview /     │
-│    ● ui   working │   Package.swift U │   pinned, dirty dot, ⌘S), the agent team, …        │
-│ ● blog.01         │   README.md     M │                                                    │
-│ 5h 24% · Week 24% │                   │                                                    │
-└───────────────────┴───────────────────┴────────────────────────────────────────────────────┘
-```
+![Switchboard: sessions grouped by folder, the project's file tree, and a file open in the editor (GitHub Dark theme)](docs/screenshot.png)
 
 ## Why Switchboard
 
@@ -115,6 +105,8 @@ Prefer to build it yourself? See [Build from source](#build-from-source).
   Minimal. In Settings or View ▸ File Icon Theme. File names take their git color.
 
 ### Source Control
+
+![Source Control with staged and unstaged changes and a side-by-side diff (Dracula theme)](docs/source-control.png)
 
 - Switch the folder sidebar from Explorer to **Changes**: Merge Changes, Staged Changes and Changes, with
   Stage (+), Unstage (−) and Discard (to the Trash for new files) per file or for all, and a commit box
