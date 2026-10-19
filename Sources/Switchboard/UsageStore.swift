@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SessionCore
 import StatusLineKit
 
@@ -6,21 +7,22 @@ import StatusLineKit
 /// Reading happens on its own serial queue; the first transcript scan
 /// takes a few seconds, later ones only read what was appended.
 @MainActor
-final class UsageStore: ObservableObject {
-    @Published private(set) var limits: PlanLimits?
-    @Published private(set) var stats: UsageStats?
+@Observable
+final class UsageStore {
+    private(set) var limits: PlanLimits?
+    private(set) var stats: UsageStats?
     /// session id → what the status line reported last
-    @Published private(set) var lines: [String: SessionLine] = [:]
-    @Published private(set) var setup = StatusLineSetup.State.unknown
+    private(set) var lines: [String: SessionLine] = [:]
+    private(set) var setup = StatusLineSetup.State.unknown
 
     nonisolated static let dataDir = AppData.dir
 
-    private let scanner = UsageScanner()
-    private let queue = DispatchQueue(label: "switchboard.usage", qos: .utility)
-    private var scanning = false
-    private var timer: Timer?
-    private var dataWatcher: Watcher?
-    private var transcriptWatcher: Watcher?
+    @ObservationIgnored private let scanner = UsageScanner()
+    @ObservationIgnored private let queue = DispatchQueue(label: "switchboard.usage", qos: .utility)
+    @ObservationIgnored private var scanning = false
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var dataWatcher: Watcher?
+    @ObservationIgnored private var transcriptWatcher: Watcher?
 
     init() {
         reloadFiles()

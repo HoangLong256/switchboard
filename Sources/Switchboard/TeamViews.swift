@@ -1,3 +1,4 @@
+import Observation
 import SessionCore
 import SwiftUI
 import TeamKit
@@ -5,11 +6,12 @@ import TeamKit
 /// Agent teams on disk (`~/.claude/teams`, `~/.claude/tasks`), reloaded every 2 s: the folders often don't exist
 /// until the first team starts, so a file watcher would have nothing to watch.
 @MainActor
-final class TeamStore: ObservableObject {
+@Observable
+final class TeamStore {
     static let shared = TeamStore()
-    @Published private(set) var teams: [Team] = []
-    private var timer: Timer?
-    private var loading = false
+    private(set) var teams: [Team] = []
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var loading = false
 
     nonisolated static let teamsDir = "\(StateBuilder.defaultClaudeHome)/teams"
     nonisolated static let tasksDir = "\(StateBuilder.defaultClaudeHome)/tasks"
@@ -100,8 +102,8 @@ struct TeammateRow: View {
 
 /// Team tab of a lead session: who is on the team and what they do, the shared task list, and the messages.
 struct TeamTab: View {
-    @ObservedObject private var teams = TeamStore.shared
-    @EnvironmentObject private var store: Store
+    private var teams: TeamStore { .shared }
+    @Environment(Store.self) private var store
     let row: Row
 
     var body: some View {

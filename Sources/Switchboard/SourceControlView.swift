@@ -5,9 +5,9 @@ import SwiftUI
 /// VS Code's Source Control view for the selected session's repository: a commit box, then Merge Changes,
 /// Staged Changes and Changes. A click opens the file's changes in a diff tab.
 struct SourceControlView: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject var model: FolderModel
-    @ObservedObject private var editors = EditorStore.shared
+    @Environment(Store.self) private var store
+    let model: FolderModel
+    private var editors: EditorStore { .shared }
     @State private var message = ""
     @State private var committing = false
     @State private var confirmDiscard: [GitChanges.Entry]?
@@ -18,6 +18,8 @@ struct SourceControlView: View {
     private var changes: GitChanges { model.changes }
 
     var body: some View {
+        // read here so the alert follows it (its closures run later)
+        let gitError = model.gitError
         Group {
             if changes.repoRoot == nil {
                 ContentUnavailableView("No repository", systemImage: "arrow.triangle.branch",
@@ -33,10 +35,10 @@ struct SourceControlView: View {
         .onAppear { model.wantsChanges = true }
         .onReceive(tick) { _ in model.loadChanges() }
         .onDisappear { model.wantsChanges = false }
-        .alert("Git", isPresented: Binding(get: { model.gitError != nil }, set: { if !$0 { model.gitError = nil } })) {
+        .alert("Git", isPresented: Binding(get: { gitError != nil }, set: { if !$0 { model.gitError = nil } })) {
             Button("OK") { model.gitError = nil }
         } message: {
-            Text(model.gitError ?? "")
+            Text(gitError ?? "")
         }
         .confirmationDialog(discardTitle, isPresented: Binding(get: { confirmDiscard != nil },
                                                                set: { if !$0 { confirmDiscard = nil } })) {

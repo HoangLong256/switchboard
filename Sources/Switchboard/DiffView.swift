@@ -5,8 +5,8 @@ import SwiftUI
 /// A file's changes like VS Code's diff editor: side by side (old left, new right) or inline, with unchanged
 /// regions folded away, in the editor theme's colors.
 struct DiffView: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject var model: DiffModel
+    @Environment(Store.self) private var store
+    let model: DiffModel
     let session: String
     @AppStorage("diffInline") private var inline = false
     @AppStorage("diffHideUnchanged") private var hideUnchanged = true

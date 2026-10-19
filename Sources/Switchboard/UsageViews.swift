@@ -16,8 +16,8 @@ extension PlanLimits.Outlook {
 /// Bottom of the sessions column: 5-hour and weekly limit as thin bars colored by whether they last until the
 /// reset (green lasts, orange gets tight, red runs out), and today's tokens. A click opens the details.
 struct UsageFooter: View {
-    @EnvironmentObject private var usage: UsageStore
-    @EnvironmentObject private var store: Store
+    @Environment(UsageStore.self) private var usage
+    @Environment(Store.self) private var store
     @State private var open = false
 
     var body: some View {
@@ -47,7 +47,7 @@ struct UsageFooter: View {
         .overlay(alignment: .top) { Divider() }
         .help("Plan limits and token usage")
         .popover(isPresented: $open, arrowEdge: .trailing) {
-            UsagePopover().environmentObject(usage).environmentObject(store)
+            UsagePopover().environment(usage).environment(store)
         }
         // `--show-usage` opens the details at launch (for trying things out); a popover needs the window first
         .task {
@@ -79,8 +79,8 @@ struct UsageFooter: View {
 
 /// Both limits with bars and countdowns, then tokens over 1/7/30 days and the top sessions and projects.
 struct UsagePopover: View {
-    @EnvironmentObject private var usage: UsageStore
-    @EnvironmentObject private var store: Store
+    @Environment(UsageStore.self) private var usage
+    @Environment(Store.self) private var store
     @AppStorage("usagePeriod") private var period: UsagePeriod = .week
     @State private var confirmSetup = false
     @State private var setupError: String?

@@ -6,8 +6,8 @@ import SwiftUI
 
 /// Editor tab of a session: open files as tabs (preview in italics, a dot for unsaved changes) above the editor.
 struct EditorArea: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject private var editors = EditorStore.shared
+    @Environment(Store.self) private var store
+    private var editors: EditorStore { .shared }
     let session: String
 
     var body: some View {
@@ -59,7 +59,7 @@ struct EditorArea: View {
 }
 
 private struct TabStrip: View {
-    @ObservedObject private var editors = EditorStore.shared
+    private var editors: EditorStore { .shared }
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     let session: String
     let tabs: EditorTabs
@@ -100,7 +100,7 @@ private struct TabStrip: View {
 
 /// A diff tab: "Package.swift (Working Tree)" with the diff icon.
 private struct DiffTabItem: View {
-    @ObservedObject private var editors = EditorStore.shared
+    private var editors: EditorStore { .shared }
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     @Environment(\.colorScheme) private var scheme
     let model: DiffModel
@@ -133,7 +133,7 @@ private struct DiffTabItem: View {
 
 /// Closing tabs, as in VS Code's tab context menu.
 struct TabMenu: View {
-    @ObservedObject private var editors = EditorStore.shared
+    private var editors: EditorStore { .shared }
     let session: String
     /// the tab's key: a file path, or a diff tab's key
     let path: String
@@ -162,11 +162,11 @@ struct TabMenu: View {
 }
 
 private struct TabItem: View {
-    @ObservedObject private var editors = EditorStore.shared
+    private var editors: EditorStore { .shared }
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     @Environment(\.colorScheme) private var scheme
     /// observed, so the dot for unsaved changes follows every keystroke
-    @ObservedObject var model: DocumentModel
+    let model: DocumentModel
     let session: String
     let active: Bool
     let preview: Bool
@@ -206,8 +206,8 @@ private struct TabItem: View {
 /// One file: editable text (Markdown with a preview), an image, or VS Code's placeholders for binary, large
 /// and missing files. Shows the save conflict banner when needed.
 struct DocumentView: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject var model: DocumentModel
+    @Environment(Store.self) private var store
+    let model: DocumentModel
     let session: String
     @AppStorage("markdownPreview") private var markdownPreview = false
     @State private var comparing = false
@@ -275,7 +275,7 @@ struct DocumentView: View {
             Button { EditorStore.shared.save(model.path) } label: { Image(systemName: "square.and.arrow.down") }
                 .help("Save (⌘S)").disabled(!model.doc.isDirty)
             Button { store.insertIntoTerminal("@\(model.path) ") } label: { Image(systemName: "at") }
-                .help("Insert @path into the terminal").disabled(store.selectedRow?.tmux == nil)
+                .help("Insert @path into the terminal").disabled(store.selectedTmux == nil)
             Button { NSWorkspace.shared.open(URL(fileURLWithPath: model.path)) } label: { Image(systemName: "arrow.up.forward.app") }
                 .help("Open with the default app")
         }
@@ -323,7 +323,7 @@ struct DocumentView: View {
 
 /// "<file> (on disk) ↔ (yours)": both versions side by side, then keep one.
 private struct CompareSheet: View {
-    @ObservedObject var model: DocumentModel
+    let model: DocumentModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -362,9 +362,9 @@ private struct CompareSheet: View {
 
 /// Editable source text: NSTextView with line numbers, undo, find (⌘F), no smart quotes, in the editor theme.
 struct CodeEditor: NSViewRepresentable {
-    @ObservedObject var model: DocumentModel
+    let model: DocumentModel
     let session: String
-    @ObservedObject private var editors = EditorStore.shared
+    private var editors: EditorStore { .shared }
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     @Environment(\.colorScheme) private var scheme
 

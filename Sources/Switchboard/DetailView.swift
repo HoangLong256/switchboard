@@ -7,12 +7,13 @@ import SwiftUI
 
 /// Third column: header with name, status and task line, then the tabs of the selected session.
 struct DetailView: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject private var editors = EditorStore.shared
-    @ObservedObject private var teams = TeamStore.shared
+    @Environment(Store.self) private var store
+    private var editors: EditorStore { .shared }
+    private var teams: TeamStore { .shared }
     @AppStorage("showModelInTabs") private var showModel = true
 
     var body: some View {
+        @Bindable var store = store
         if let row = store.selectedRow {
             VStack(spacing: 0) {
                 DetailHeader(row: row)
@@ -78,8 +79,8 @@ struct DetailView: View {
 
 /// "Opus 5.5 · high" next to the tabs: the model and effort the session runs with, details on click.
 struct ModelChip: View {
-    @EnvironmentObject private var usage: UsageStore
-    @EnvironmentObject private var store: Store
+    @Environment(UsageStore.self) private var usage
+    @Environment(Store.self) private var store
     let row: Row
     @State private var open = false
 
@@ -148,8 +149,8 @@ struct ModelChip: View {
 }
 
 struct DetailHeader: View {
-    @EnvironmentObject private var store: Store
-    @EnvironmentObject private var usage: UsageStore
+    @Environment(Store.self) private var store
+    @Environment(UsageStore.self) private var usage
     let row: Row
 
     var body: some View {
@@ -188,7 +189,7 @@ struct DetailHeader: View {
 
 /// Shown when no session is selected.
 struct WelcomeView: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
 
     var body: some View {
         VStack(spacing: 14) {
@@ -204,7 +205,7 @@ struct WelcomeView: View {
 }
 
 struct TerminalTab: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     @Environment(\.colorScheme) private var scheme
     let row: Row
@@ -389,9 +390,9 @@ struct NotesTab: View {
 
 /// Info tab: the session stopped at a usage limit. When it resets and whether it will be continued.
 struct LimitSection: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var resume = AutoContinue.shared
-    @EnvironmentObject private var store: Store
+    private var settings: AppSettings { .shared }
+    private var resume: AutoContinue { .shared }
+    @Environment(Store.self) private var store
     let row: Row
     let hit: LimitHit
 

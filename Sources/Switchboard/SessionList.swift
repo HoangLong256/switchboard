@@ -5,9 +5,9 @@ import SwiftUI
 /// First column: every session, favorites on top, workers indented under their PM,
 /// sorted by what needs you first.
 struct SessionList: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject private var teams = TeamStore.shared
-    @ObservedObject private var subagents = SubagentStore.shared
+    @Environment(Store.self) private var store
+    private var teams: TeamStore { .shared }
+    private var subagents: SubagentStore { .shared }
     @AppStorage("showSubagents") private var showSubagents = true
     @State private var search = ""
     @State private var confirmClose: Row?
@@ -16,6 +16,7 @@ struct SessionList: View {
     @AppStorage("collapsedGroups") private var collapsedGroups = ""
 
     var body: some View {
+        @Bindable var store = store
         let (fav, rest) = sections
         List(selection: $store.selected) {
             if let error = store.error {
@@ -225,7 +226,7 @@ private struct DotCount: LabelStyle {
 }
 
 struct SessionRowView: View {
-    @ObservedObject private var resume = AutoContinue.shared
+    private var resume: AutoContinue { .shared }
     let row: Row
     let depth: Int
     let favorite: Bool

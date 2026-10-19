@@ -5,8 +5,8 @@ import SwiftUI
 @main
 struct SwitchboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var store = Store()
-    @StateObject private var usage = UsageStore()
+    @State private var store = Store()
+    @State private var usage = UsageStore()
     @AppStorage("showSubagents") private var showSubagents = true
 
     init() {
@@ -18,8 +18,8 @@ struct SwitchboardApp: App {
     var body: some Scene {
         WindowGroup("Switchboard") {
             ContentView()
-                .environmentObject(store)
-                .environmentObject(usage)
+                .environment(store)
+                .environment(usage)
                 .frame(minWidth: 1000, minHeight: 600)
         }
         .defaultSize(width: 1360, height: 860)
@@ -182,12 +182,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Sessions | folder of the selected session | terminal, file, handover, notes, info.
 struct ContentView: View {
-    @EnvironmentObject private var store: Store
-    @ObservedObject private var subagents = SubagentStore.shared
+    @Environment(Store.self) private var store
+    private var subagents: SubagentStore { .shared }
     @State private var columns = NavigationSplitViewVisibility.all
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
 
     var body: some View {
+        @Bindable var store = store
+        // read here so the sheet, alert and dialog below follow these properties (their closures run later)
+        let viewing = subagents.viewing, notice = store.notice, moveRequest = store.moveRequest
         NavigationSplitView(columnVisibility: $columns) {
             SessionList()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 380)
@@ -204,19 +207,19 @@ struct ContentView: View {
         // the session's name is in the header; the toolbar stays clean
         .hidingToolbarTitle()
         .sheet(isPresented: $store.newSessionOpen) { NewSessionSheet() }
-        .sheet(isPresented: Binding(get: { subagents.viewing != nil }, set: { if !$0 { subagents.viewing = nil } })) {
-            if let v = subagents.viewing {
-                SubagentActivityView(initial: v.agent, session: v.session).environmentObject(store)
+        .sheet(isPresented: Binding(get: { viewing != nil }, set: { if !$0 { subagents.viewing = nil } })) {
+            if let v = viewing {
+                SubagentActivityView(initial: v.agent, session: v.session).environment(store)
             }
         }
-        .alert("Switchboard", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
+        .alert("Switchboard", isPresented: Binding(get: { notice != nil }, set: { if !$0 { store.notice = nil } })) {
             Button("OK") { store.notice = nil }
         } message: {
-            Text(store.notice ?? "")
+            Text(notice ?? "")
         }
-        .confirmationDialog("Move “\(store.moveRequest?.name ?? "")” into Switchboard?",
-                            isPresented: Binding(get: { store.moveRequest != nil }, set: { if !$0 { store.moveRequest = nil } }),
-                            presenting: store.moveRequest) { row in
+        .confirmationDialog("Move “\(moveRequest?.name ?? "")” into Switchboard?",
+                            isPresented: Binding(get: { moveRequest != nil }, set: { if !$0 { store.moveRequest = nil } }),
+                            presenting: moveRequest) { row in
             Button("Move") { Task { await store.moveIn(row) } }
             Button("Cancel", role: .cancel) {}
         } message: { row in
@@ -233,7 +236,7 @@ struct ContentView: View {
 }
 
 struct NewSessionSheet: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var folder = UserDefaults.standard.string(forKey: "lastFolder") ?? NSHomeDirectory()

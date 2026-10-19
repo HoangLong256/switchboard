@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import IOKit.pwr_mgt
+import Observation
 import SessionCore
 import SwiftUI
 
@@ -28,25 +29,26 @@ enum Appearance: String, CaseIterable, Identifiable {
 
 /// App settings (Settings, ⌘,): appearance, keeping the Mac awake, continuing sessions after a usage limit.
 @MainActor
-final class AppSettings: ObservableObject {
+@Observable
+final class AppSettings {
     static let shared = AppSettings()
-    private let d = UserDefaults.standard
+    @ObservationIgnored private let d = UserDefaults.standard
 
-    @Published var appearance: Appearance {
+    var appearance: Appearance {
         didSet {
             d.set(appearance.rawValue, forKey: "appearance")
             applyAppearance()
         }
     }
 
-    @Published var iconStyle: IconStyle {
+    var iconStyle: IconStyle {
         didSet {
             d.set(iconStyle.rawValue, forKey: "iconStyle")
             NSApp.applicationIconImage = AppIcon.image(size: 512)
         }
     }
 
-    @Published var switchTint: SwitchTint {
+    var switchTint: SwitchTint {
         didSet {
             d.set(switchTint.rawValue, forKey: "switchTint")
             NSApp.applicationIconImage = AppIcon.image(size: 512)
@@ -63,31 +65,31 @@ final class AppSettings: ObservableObject {
         DispatchQueue.main.async { NSApp.applicationIconImage = AppIcon.image(size: 512) }
     }
 
-    @Published var keepAwake: Bool { didSet { d.set(keepAwake, forKey: "keepAwake") } }
-    @Published var keepDisplayOn: Bool { didSet { d.set(keepDisplayOn, forKey: "keepDisplayOn") } }
+    var keepAwake: Bool { didSet { d.set(keepAwake, forKey: "keepAwake") } }
+    var keepDisplayOn: Bool { didSet { d.set(keepDisplayOn, forKey: "keepDisplayOn") } }
     /// count a session waiting for its limit to reset as working, so the Mac is awake to continue it
-    @Published var awakeForResume: Bool { didSet { d.set(awakeForResume, forKey: "awakeForResume") } }
+    var awakeForResume: Bool { didSet { d.set(awakeForResume, forKey: "awakeForResume") } }
 
-    @Published var autoContinue: Bool { didSet { d.set(autoContinue, forKey: "autoContinue") } }
-    @Published var continueMessage: String { didSet { d.set(continueMessage, forKey: "continueMessage") } }
+    var autoContinue: Bool { didSet { d.set(autoContinue, forKey: "autoContinue") } }
+    var continueMessage: String { didSet { d.set(continueMessage, forKey: "continueMessage") } }
     /// sessions that should not be continued automatically (names)
-    @Published var autoContinueOff: [String] { didSet { d.set(autoContinueOff, forKey: "autoContinueOff") } }
+    var autoContinueOff: [String] { didSet { d.set(autoContinueOff, forKey: "autoContinueOff") } }
     /// start new sessions with Claude Code's unattended retry mode (it waits out the limit itself)
-    @Published var retryWatchdog: Bool { didSet { d.set(retryWatchdog, forKey: "retryWatchdog") } }
+    var retryWatchdog: Bool { didSet { d.set(retryWatchdog, forKey: "retryWatchdog") } }
     /// the longest a watchdog session waits for a limit, in hours; 0 = no cap
-    @Published var watchdogMaxHours: Int { didSet { d.set(watchdogMaxHours, forKey: "watchdogMaxHours") } }
+    var watchdogMaxHours: Int { didSet { d.set(watchdogMaxHours, forKey: "watchdogMaxHours") } }
 
     // Notifications (see Notifications.swift): which kinds, and how
-    @Published var notifyNeedsYou: Bool { didSet { d.set(notifyNeedsYou, forKey: "notifyNeedsYou") } }
-    @Published var notifyFinished: Bool { didSet { d.set(notifyFinished, forKey: "notifyFinished") } }
-    @Published var notifyUsageLimit: Bool { didSet { d.set(notifyUsageLimit, forKey: "notifyUsageLimit") } }
-    @Published var notifySubagentFinished: Bool { didSet { d.set(notifySubagentFinished, forKey: "notifySubagentFinished") } }
-    @Published var notifyEnded: Bool { didSet { d.set(notifyEnded, forKey: "notifyEnded") } }
-    @Published var notifySound: Bool { didSet { d.set(notifySound, forKey: "notifySound") } }
+    var notifyNeedsYou: Bool { didSet { d.set(notifyNeedsYou, forKey: "notifyNeedsYou") } }
+    var notifyFinished: Bool { didSet { d.set(notifyFinished, forKey: "notifyFinished") } }
+    var notifyUsageLimit: Bool { didSet { d.set(notifyUsageLimit, forKey: "notifyUsageLimit") } }
+    var notifySubagentFinished: Bool { didSet { d.set(notifySubagentFinished, forKey: "notifySubagentFinished") } }
+    var notifyEnded: Bool { didSet { d.set(notifyEnded, forKey: "notifyEnded") } }
+    var notifySound: Bool { didSet { d.set(notifySound, forKey: "notifySound") } }
     /// the number of sessions that need you on the Dock icon
-    @Published var dockBadge: Bool { didSet { d.set(dockBadge, forKey: "dockBadge") } }
+    var dockBadge: Bool { didSet { d.set(dockBadge, forKey: "dockBadge") } }
     /// no notifications while Switchboard is the frontmost app
-    @Published var notifyOnlyInBackground: Bool { didSet { d.set(notifyOnlyInBackground, forKey: "notifyOnlyInBackground") } }
+    var notifyOnlyInBackground: Bool { didSet { d.set(notifyOnlyInBackground, forKey: "notifyOnlyInBackground") } }
 
     private init() {
         appearance = Appearance(rawValue: d.string(forKey: "appearance") ?? "") ?? .system
@@ -140,14 +142,15 @@ final class AppSettings: ObservableObject {
 /// A power assertion while sessions work, like `caffeinate -i` (and `-d` with the display option). Shows in
 /// `pmset -g assertions` under the reason. It can't stop sleep when the lid closes on battery; macOS decides that.
 @MainActor
-final class KeepAwake: ObservableObject {
+@Observable
+final class KeepAwake {
     static let shared = KeepAwake()
     /// what is holding the Mac awake right now, nil = not holding
-    @Published private(set) var reason: String?
-    private var systemID: IOPMAssertionID = 0
-    private var displayID: IOPMAssertionID = 0
-    private var systemReason: String?
-    private var displayReason: String?
+    private(set) var reason: String?
+    @ObservationIgnored private var systemID: IOPMAssertionID = 0
+    @ObservationIgnored private var displayID: IOPMAssertionID = 0
+    @ObservationIgnored private var systemReason: String?
+    @ObservationIgnored private var displayReason: String?
 
     /// `working`: sessions working (or waiting to be continued). Takes or releases the assertions.
     func update(working: Int, waitingForReset: Int, settings: AppSettings) {
@@ -183,7 +186,8 @@ final class KeepAwake: ObservableObject {
 /// server can be continued; only if nothing was said in the conversation since the limit (the parser checks
 /// that the limit message is still the newest one).
 @MainActor
-final class AutoContinue: ObservableObject {
+@Observable
+final class AutoContinue {
     static let shared = AutoContinue()
 
     struct Pending: Equatable {
@@ -195,11 +199,11 @@ final class AutoContinue: ObservableObject {
     }
 
     /// sessions standing at a limit, by name
-    @Published private(set) var pending: [String: Pending] = [:]
+    private(set) var pending: [String: Pending] = [:]
     /// last resumes, newest first (shown in Settings)
-    @Published private(set) var log: [String] = []
+    private(set) var log: [String] = []
     /// limit hits already continued: name → hit time
-    private var done: [String: String] = [:]
+    @ObservationIgnored private var done: [String: String] = [:]
     /// a minute after the reset, so the limit has really lifted
     static let grace: TimeInterval = 60
 

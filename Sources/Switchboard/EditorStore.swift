@@ -2,13 +2,15 @@ import AppKit
 import EditorKit
 import FolderKit
 import Foundation
+import Observation
 
-/// One open file. Its own ObservableObject, so typing only redraws the editor, not the whole window.
+/// One open file. Its own Observable, so typing only redraws the editor, not the whole window.
 @MainActor
-final class DocumentModel: ObservableObject {
-    @Published var doc: TextDocument
+@Observable
+final class DocumentModel {
+    var doc: TextDocument
     /// the last save stopped because the file on disk is newer (VS Code's save conflict)
-    @Published var conflict = false
+    var conflict = false
     /// counts the times the text was replaced from outside the editor (reload, revert, Open Anyway), so the
     /// editor view takes the new text without comparing whole files on every update
     private(set) var replacements = 0
@@ -34,20 +36,21 @@ final class DocumentModel: ObservableObject {
 
 /// Open editors per session (VS Code's preview tabs), and the save / close / reload rules around them.
 @MainActor
-final class EditorStore: ObservableObject {
+@Observable
+final class EditorStore {
     static let shared = EditorStore()
 
     /// session name → its tabs
-    @Published private(set) var tabs: [String: EditorTabs] = [:]
-    @Published private(set) var documents: [String: DocumentModel] = [:]
+    private(set) var tabs: [String: EditorTabs] = [:]
+    private(set) var documents: [String: DocumentModel] = [:]
     /// diff tabs by their key (`DiffModel.key`), next to the files in the same tab strip
-    @Published private(set) var diffs: [String: DiffModel] = [:]
+    private(set) var diffs: [String: DiffModel] = [:]
     /// dirty tabs are being closed: ask Save / Don't Save / Cancel
-    @Published var closeRequest: CloseRequest?
+    var closeRequest: CloseRequest?
     /// each increment moves keyboard focus into the editor (double click in the tree)
-    @Published private(set) var focusRequest = 0
+    private(set) var focusRequest = 0
 
-    private var timer: Timer?
+    @ObservationIgnored private var timer: Timer?
 
     private init() {
         // clean documents follow the disk (a session editing the file); a stat per open file per second is cheap
@@ -191,16 +194,17 @@ final class EditorStore: ObservableObject {
 /// A diff tab: one file's changes, as VS Code's diff editor shows them. `staged`: HEAD ↔ index
 /// ("Staged Changes"), otherwise index ↔ working tree ("Changes").
 @MainActor
-final class DiffModel: ObservableObject {
+@Observable
+final class DiffModel {
     /// tab key: "diff:index:<path>" or "diff:work:<path>"
     let key: String
     let entry: GitChanges.Entry
     let repo: String
     let staged: Bool
-    @Published private(set) var rows: [LineDiff.Row] = []
-    @Published private(set) var notice: String?
-    @Published private(set) var loaded = false
-    private var stamp: (Date?, Date?) = (nil, nil)
+    private(set) var rows: [LineDiff.Row] = []
+    private(set) var notice: String?
+    private(set) var loaded = false
+    @ObservationIgnored private var stamp: (Date?, Date?) = (nil, nil)
 
     var path: String { entry.path }
     var name: String { entry.name }

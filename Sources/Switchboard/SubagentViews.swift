@@ -1,20 +1,22 @@
+import Observation
 import SessionCore
 import SwiftUI
 
 /// The subagents of the live sessions, read in the background a few seconds apart (Store calls `update` on
 /// every refresh). Sessions without recent subagent files cost one directory listing.
 @MainActor
-final class SubagentStore: ObservableObject {
+@Observable
+final class SubagentStore {
     static let shared = SubagentStore()
 
     /// session id → its subagents (running first)
-    @Published private(set) var bySession: [String: [Subagent]] = [:]
+    private(set) var bySession: [String: [Subagent]] = [:]
     /// the subagent whose activity is open, with its session
-    @Published var viewing: (agent: Subagent, session: Session)?
+    var viewing: (agent: Subagent, session: Session)?
 
-    private var loading = false
-    private var last = Date.distantPast
-    private let queue = DispatchQueue(label: "switchboard.subagents", qos: .utility)
+    @ObservationIgnored private var loading = false
+    @ObservationIgnored private var last = Date.distantPast
+    @ObservationIgnored private let queue = DispatchQueue(label: "switchboard.subagents", qos: .utility)
     static let interval: TimeInterval = 3
 
     func subagents(of s: Session) -> [Subagent] { bySession[s.id] ?? [] }
@@ -90,8 +92,8 @@ struct SubagentRow: View {
 
 /// Info tab: the session's subagents, running ones with what they do now, then those that finished recently.
 struct SubagentsSection: View {
-    @ObservedObject private var store = SubagentStore.shared
-    @EnvironmentObject private var sessions: Store
+    private var store: SubagentStore { .shared }
+    @Environment(Store.self) private var sessions
     let session: Session
 
     var body: some View {
@@ -179,8 +181,8 @@ private func toolSymbol(_ tool: String?) -> String {
 /// What a subagent does, step by step: its task, its messages, each tool call with its command or file and
 /// what came back. Reloads every two seconds while it runs and follows the newest step.
 struct SubagentActivityView: View {
-    @ObservedObject private var subagents = SubagentStore.shared
-    @EnvironmentObject private var store: Store
+    private var subagents: SubagentStore { .shared }
+    @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     let initial: Subagent
     let session: Session
