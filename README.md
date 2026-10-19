@@ -110,8 +110,18 @@ Shortcuts: ⌘N new session · ⇧⌘H next waiting session · ⌘J focus termin
 
 It needs `brew install tmux` and Claude Code (`claude`) on the Mac.
 
-New versions: `git tag v0.2.0 && git push --tags` builds the app on GitHub Actions and attaches it to a release
-(`sh scripts/release.sh` makes the same .dmg and .zip locally, in `dist/`).
+New versions are tagged by themselves: when CI passes on `main`, **Auto Tag** looks at the commit messages since the
+last tag and releases the next version, with the app built on GitHub Actions and attached to the release.
+
+| Commit message | Version | Example |
+|---|---|---|
+| `feat: …` or `feature: …` | minor | v0.2.1 → v0.3.0 |
+| `fix: …` or `bug: …` | patch | v0.2.1 → v0.2.2 |
+| anything else (`docs:`, `ci:`, `chore:`, …) | no release | |
+
+A scope works too (`feat(editor): …`), and with several commits the biggest bump wins. `sh scripts/next-version.sh`
+prints what would be released. A tag pushed by hand (`git tag v1.0.0 && git push --tags`) still releases, e.g. for a
+major version. `sh scripts/release.sh` makes the same .dmg and .zip locally, in `dist/`.
 
 ## Run from source
 

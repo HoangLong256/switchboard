@@ -1,0 +1,50 @@
+# After CI passes on main, tags a new version from the commit messages since the last tag and releases it:
+#   feat: …  → v0.(x+1).0      fix: …  → v0.x.(y+1)      anything else → no release
+# (scripts/next-version.sh). A tag pushed by a workflow doesn't start other workflows, so this calls Release itself.
+name: Auto Tag
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - id: next
+        name: Next version
+        run: |
+          TAG="$(sh scripts/next-version.sh)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "${TAG:-No feat: or fix: commits since the last tag, nothing to release}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Push the tag
+        if: steps.next.outputs.tag != ''
+        env:
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Switchboard ${TAG#v}"
+          git push origin "$TAG"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

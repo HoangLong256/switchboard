@@ -1,9 +1,16 @@
-# Push a tag like v0.2.0 to build Switchboard and attach the .dmg and .zip to a GitHub release.
-# Run it by hand (Actions ▸ Release ▸ Run workflow) to only build the app and keep it as a run artifact.
+# Builds Switchboard and attaches the .dmg and .zip to a GitHub release:
+# - pushing a tag like v0.2.0 by hand,
+# - Auto Tag (after CI passes on main with a feat: or fix: commit) calls it with the new tag,
+# - running it by hand (Actions ▸ Release ▸ Run workflow) only builds and keeps the app as a run artifact.
 name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
   workflow_dispatch:
 
 permissions:
@@ -12,23 +19,25 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
+    env:
+      # the tag to release: Auto Tag's, or the pushed one; empty = build only
+      TAG: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - name: Build
         run: |
-          case "$GITHUB_REF" in
-            refs/tags/v*) VERSION="${GITHUB_REF_NAME#v}" sh scripts/release.sh ;;
-            *) sh scripts/release.sh ;;
-          esac
+          if [ -n "$TAG" ]; then VERSION="${TAG#v}" sh scripts/release.sh; else sh scripts/release.sh; fi
       - name: Publish
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Switchboard $GITHUB_REF_NAME" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" dist/Switchboard-*.dmg dist/Switchboard-*.zip --clobber
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Switchboard $TAG" --generate-notes
+          gh release upload "$TAG" dist/Switchboard-*.dmg dist/Switchboard-*.zip --clobber
       - name: Keep the build
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: env.TAG == ''
         uses: actions/upload-artifact@v4
         with:
           name: Switchboard
