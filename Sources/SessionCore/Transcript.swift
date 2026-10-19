@@ -195,7 +195,13 @@ public enum Transcript {
 
     /// Start times of background tasks still running per the text (nil = unknown time).
     static func backgroundStarts(_ text: String) -> [Date?] {
+        Array(taskStates(text).running.values)
+    }
+
+    /// Background tasks by id: those still running (with their start time) and those that finished.
+    static func taskStates(_ text: String) -> (running: [String: Date?], finished: Set<String>) {
         var running: [String: Date?] = [:]
+        var finished = Set<String>()
         for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
             // cheap prefilter: only lines that can start or finish a task get parsed
             guard raw.contains("<task-notification>") || raw.contains("async_launched") || raw.contains("backgroundTaskId")
@@ -205,14 +211,27 @@ public enum Transcript {
             let type = obj["type"] as? String
             let at = (obj["timestamp"] as? String).flatMap(parseISO)
             if let (id, status) = notification(in: obj, type: type) {
-                if status != "running" { running.removeValue(forKey: id) }
+                if status != "running" { running.removeValue(forKey: id); finished.insert(id) }
                 continue
             }
             if type == "user" {
-                for id in startedIds(obj) { running.updateValue(at, forKey: id) }
+                for id in startedIds(obj) { running.updateValue(at, forKey: id); finished.remove(id) }
             }
         }
-        return Array(running.values)
+        return (running, finished)
+    }
+
+    /// Ids of the tool calls that have a result in the text (a foreground agent's call gets one when it ends).
+    static func toolResultIds(_ text: String) -> Set<String> {
+        var ids = Set<String>()
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) where raw.contains("\"tool_use_id\"") {
+            guard let obj = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any],
+                  let blocks = (obj["message"] as? [String: Any])?["content"] as? [Any] else { continue }
+            for case let b as [String: Any] in blocks where b["type"] as? String == "tool_result" {
+                if let id = b["tool_use_id"] as? String { ids.insert(id) }
+            }
+        }
+        return ids
     }
 
     /// Running tasks, without those started longer ago than `backgroundStaleAfter`.

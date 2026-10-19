@@ -7,6 +7,8 @@ import SwiftUI
 struct SessionList: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var teams = TeamStore.shared
+    @ObservedObject private var subagents = SubagentStore.shared
+    @AppStorage("showSubagents") private var showSubagents = true
     @State private var search = ""
     @State private var confirmClose: Row?
     @AppStorage("sessionsGrouping") private var grouping: SessionGrouping = .none
@@ -120,6 +122,18 @@ struct SessionList: View {
                         .onTapGesture {
                             store.selected = r.item.name
                             store.tab = .team
+                        }
+                }
+            }
+            // running subagents under their session; a click shows what the subagent does
+            if showSubagents {
+                ForEach(subagents.running(of: r.item.session)) { a in
+                    SubagentRow(agent: a)
+                        .selectionDisabled()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            store.selected = r.item.name
+                            subagents.viewing = (a, r.item.session)
                         }
                 }
             }
@@ -262,22 +276,86 @@ struct StatusDot: View {
     /// the colors follow the theme
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     let status: Status
-    @State private var dim = false
 
     var body: some View {
         Group {
             if status.core.cls == "off" {
                 Circle().strokeBorder(status.color, lineWidth: 1.2)
             } else {
-                Circle().fill(status.color)
-                    .opacity(status.active && dim ? 0.35 : 1)
-                    .animation(status.active ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
-                               value: dim)
+                PulsingDot(color: NSColor(status.color), pulsing: status.active)
             }
         }
         .frame(width: 7, height: 7)
-        .onAppear { dim = status.active }
-        .onChange(of: status.active) { _, on in dim = on }
         .help(status.why ?? status.label)
+    }
+}
+
+/// A dot that pulses while its session works. The pulse is a Core Animation animation, so it runs in the render
+/// server: a SwiftUI animation would update the whole window on every frame, for every working session, forever.
+/// It pauses while Switchboard is in the background.
+private struct PulsingDot: NSViewRepresentable {
+    let color: NSColor
+    let pulsing: Bool
+
+    func makeNSView(context: Context) -> DotView { DotView() }
+
+    func updateNSView(_ v: DotView, context: Context) {
+        v.color = color
+        v.pulsing = pulsing
+    }
+
+    final class DotView: NSView {
+        var color: NSColor = .systemGreen { didSet { if color != oldValue { updateLayer() } } }
+        var pulsing = false { didSet { if pulsing != oldValue { updatePulse() } } }
+        private var observers: [NSObjectProtocol] = []
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            let center = NotificationCenter.default
+            for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+                observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.updatePulse() }
+                })
+            }
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+
+        override var wantsUpdateLayer: Bool { true }
+
+        override func updateLayer() {
+            layer?.backgroundColor = color.cgColor
+            layer?.cornerRadius = min(bounds.width, bounds.height) / 2
+        }
+
+        override func layout() {
+            super.layout()
+            layer?.cornerRadius = min(bounds.width, bounds.height) / 2
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            updatePulse()
+        }
+
+        private func updatePulse() {
+            guard let layer else { return }
+            let on = pulsing && window != nil && NSApp.isActive
+            if on, layer.animation(forKey: "pulse") == nil {
+                let a = CABasicAnimation(keyPath: "opacity")
+                a.fromValue = 1
+                a.toValue = 0.35
+                a.duration = 0.9
+                a.autoreverses = true
+                a.repeatCount = .infinity
+                a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                layer.add(a, forKey: "pulse")
+            } else if !on {
+                layer.removeAnimation(forKey: "pulse")
+            }
+        }
     }
 }

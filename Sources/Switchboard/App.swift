@@ -7,6 +7,13 @@ struct SwitchboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
     @StateObject private var usage = UsageStore()
+    @AppStorage("showSubagents") private var showSubagents = true
+
+    init() {
+        // the login PATH comes from running zsh, which can take seconds with a heavy profile: fetch it now, off the
+        // main thread, instead of when the first terminal attaches
+        DispatchQueue.global(qos: .userInitiated).async { _ = LoginShell.path }
+    }
 
     var body: some Scene {
         WindowGroup("Switchboard") {
@@ -61,6 +68,7 @@ struct SwitchboardApp: App {
                     set: { UserDefaults.standard.set($0.rawValue, forKey: "iconTheme") })) {
                     ForEach(IconTheme.allCases) { Text($0.title).tag($0) }
                 }
+                Toggle("Show Running Subagents", isOn: $showSubagents)
                 Divider()
             }
             CommandMenu("Session") {
@@ -175,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Sessions | folder of the selected session | terminal, file, handover, notes, info.
 struct ContentView: View {
     @EnvironmentObject private var store: Store
+    @ObservedObject private var subagents = SubagentStore.shared
     @State private var columns = NavigationSplitViewVisibility.all
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
 
@@ -195,6 +204,11 @@ struct ContentView: View {
         // the session's name is in the header; the toolbar stays clean
         .hidingToolbarTitle()
         .sheet(isPresented: $store.newSessionOpen) { NewSessionSheet() }
+        .sheet(isPresented: Binding(get: { subagents.viewing != nil }, set: { if !$0 { subagents.viewing = nil } })) {
+            if let v = subagents.viewing {
+                SubagentActivityView(initial: v.agent, session: v.session).environmentObject(store)
+            }
+        }
         .alert("Switchboard", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } })) {
             Button("OK") { store.notice = nil }
         } message: {
