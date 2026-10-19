@@ -1,0 +1,53 @@
+#!/bin/sh
+# Builds a release and wraps it as Switchboard.app in dist/. With --install, copies it to ~/Applications
+# (SWITCHBOARD_INSTALL=<folder> for another one) and opens it.
+set -eu
+cd "$(dirname "$0")/.."
+
+swift build -c release
+BIN="$(swift build -c release --show-bin-path)"
+APP="dist/Switchboard.app"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$BIN/Switchboard" "$APP/Contents/MacOS/Switchboard"
+# status line helper; the app copies it to ~/.switchboard/bin when you set up the live status line
+cp "$BIN/switchboard-statusline" "$APP/Contents/MacOS/switchboard-statusline"
+# SwiftPM resource bundles (SwiftTerm's): its Bundle.module looks in the .app's root folder, else in .build.
+# Content in the root means the bundle can't be codesigned as a whole; the linker already ad-hoc signed
+# the arm64 binary, which is all a locally built app needs.
+for b in "$BIN"/*.bundle; do [ -e "$b" ] && cp -R "$b" "$APP/"; done
+
+# icon: the app draws its own mark (AppMark) into an iconset
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+# ICON_STYLE=hub sh scripts/bundle.sh picks another design (see IconStyle)
+"$BIN/Switchboard" ${ICON_STYLE:+-iconStyle "$ICON_STYLE"} --export-icon "$ICONSET" && iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" || echo "icon skipped"
+
+cat > "$APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Switchboard</string>
+    <key>CFBundleDisplayName</key><string>Switchboard</string>
+    <key>CFBundleIdentifier</key><string>dev.local.switchboard</string>
+    <key>CFBundleExecutable</key><string>Switchboard</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict>
+</plist>
+PLIST
+echo "built $APP"
+
+if [ "${1:-}" = "--install" ]; then
+    DEST="${SWITCHBOARD_INSTALL:-$HOME/Applications}"
+    mkdir -p "$DEST"
+    rm -rf "$DEST/Switchboard.app"
+    cp -R "$APP" "$DEST/"
+    echo "installed $DEST/Switchboard.app"
+    open "$DEST/Switchboard.app"
+fi
