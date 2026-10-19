@@ -179,8 +179,9 @@ private struct Mark: View {
             let center = CGPoint(x: w / 2, y: h / 2)
             let n = 6
             let pts = (0..<n).map { i -> CGPoint in
-                let a = Double(i) / Double(n) * .pi * 2 - .pi / 2
-                return CGPoint(x: center.x + cos(a) * w * 0.29, y: center.y + sin(a) * h * 0.29)
+                let a: CGFloat = CGFloat(i) / CGFloat(n) * 2 * .pi - .pi / 2
+                let rx: CGFloat = w * 0.29, ry: CGFloat = h * 0.29
+                return CGPoint(x: center.x + cos(a) * rx, y: center.y + sin(a) * ry)
             }
             for p in pts {
                 var l = Path(); l.move(to: center); l.addLine(to: p)
