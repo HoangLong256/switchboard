@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("editorTheme") private var editorTheme: EditorTheme = .automatic
     @AppStorage("sessionsGrouping") private var grouping: SessionGrouping = .none
     @AppStorage("showModelInTabs") private var showModel = true
+    @AppStorage("showSubagents") private var showSubagents = true
     @AppStorage("iconTheme") private var iconTheme: IconTheme = .seti
     @Environment(\.colorScheme) private var scheme
 
@@ -49,6 +50,7 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 Toggle("Show model and effort next to the session's tabs", isOn: $showModel)
+                Toggle("Show running subagents under their session", isOn: $showSubagents)
             }
 
             Section {
@@ -78,6 +80,8 @@ struct SettingsView: View {
             } footer: {
                 Text("Colors the app, the editor and the terminal like the VS Code theme of the same name. A theme is light or dark by itself, so it takes over from Appearance. Automatic keeps the macOS look, with Light Modern or Dark Modern in the editor and terminal.")
             }
+
+            NotificationSettings()
 
             Section {
                 Toggle("Keep the Mac awake while sessions are working", isOn: $settings.keepAwake)

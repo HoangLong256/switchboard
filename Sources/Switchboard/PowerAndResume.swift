@@ -77,6 +77,18 @@ final class AppSettings: ObservableObject {
     /// the longest a watchdog session waits for a limit, in hours; 0 = no cap
     @Published var watchdogMaxHours: Int { didSet { d.set(watchdogMaxHours, forKey: "watchdogMaxHours") } }
 
+    // Notifications (see Notifications.swift): which kinds, and how
+    @Published var notifyNeedsYou: Bool { didSet { d.set(notifyNeedsYou, forKey: "notifyNeedsYou") } }
+    @Published var notifyFinished: Bool { didSet { d.set(notifyFinished, forKey: "notifyFinished") } }
+    @Published var notifyUsageLimit: Bool { didSet { d.set(notifyUsageLimit, forKey: "notifyUsageLimit") } }
+    @Published var notifySubagentFinished: Bool { didSet { d.set(notifySubagentFinished, forKey: "notifySubagentFinished") } }
+    @Published var notifyEnded: Bool { didSet { d.set(notifyEnded, forKey: "notifyEnded") } }
+    @Published var notifySound: Bool { didSet { d.set(notifySound, forKey: "notifySound") } }
+    /// the number of sessions that need you on the Dock icon
+    @Published var dockBadge: Bool { didSet { d.set(dockBadge, forKey: "dockBadge") } }
+    /// no notifications while Switchboard is the frontmost app
+    @Published var notifyOnlyInBackground: Bool { didSet { d.set(notifyOnlyInBackground, forKey: "notifyOnlyInBackground") } }
+
     private init() {
         appearance = Appearance(rawValue: d.string(forKey: "appearance") ?? "") ?? .system
         iconStyle = .current
@@ -89,6 +101,25 @@ final class AppSettings: ObservableObject {
         autoContinueOff = d.stringArray(forKey: "autoContinueOff") ?? []
         retryWatchdog = d.bool(forKey: "retryWatchdog")
         watchdogMaxHours = d.object(forKey: "watchdogMaxHours") as? Int ?? 6
+        notifyNeedsYou = d.object(forKey: "notifyNeedsYou") as? Bool ?? true
+        notifyFinished = d.object(forKey: "notifyFinished") as? Bool ?? true
+        notifyUsageLimit = d.object(forKey: "notifyUsageLimit") as? Bool ?? true
+        notifySubagentFinished = d.object(forKey: "notifySubagentFinished") as? Bool ?? true
+        notifyEnded = d.bool(forKey: "notifyEnded")
+        notifySound = d.object(forKey: "notifySound") as? Bool ?? true
+        dockBadge = d.object(forKey: "dockBadge") as? Bool ?? true
+        notifyOnlyInBackground = d.bool(forKey: "notifyOnlyInBackground")
+    }
+
+    /// Whether notifications of this kind are on.
+    func notifies(_ kind: NotificationKind) -> Bool {
+        switch kind {
+        case .needsYou: notifyNeedsYou
+        case .finished: notifyFinished
+        case .usageLimit, .continued: notifyUsageLimit
+        case .subagentFinished: notifySubagentFinished
+        case .ended: notifyEnded
+        }
     }
 
     func continues(_ name: String) -> Bool { autoContinue && !autoContinueOff.contains(name) }
@@ -208,6 +239,7 @@ final class AutoContinue: ObservableObject {
                 let time = Date().formatted(date: .omitted, time: .shortened)
                 self.log.insert(err.map { "\(time) \(name): couldn't continue – \($0)" } ?? "\(time) \(name): continued after the usage limit reset", at: 0)
                 self.log = Array(self.log.prefix(20))
+                if err == nil { Notifier.shared.continued(name) }
             }
         }
     }
