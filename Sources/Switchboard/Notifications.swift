@@ -38,6 +38,14 @@ final class Notifier: NSObject {
     let hasCenter = Bundle.main.bundleIdentifier != nil
     /// set by the Store: shows the session (and tab) of a clicked notification
     @ObservationIgnored var open: ((String, DetailTab) -> Void)?
+    /// set by the Store: shows a message in the app (an answer from a notification that couldn't be sent)
+    @ObservationIgnored var notice: ((String) -> Void)?
+
+    /// Notification categories with answer buttons, for a session that needs you
+    enum Category {
+        static let permission = "needs-permission"
+        static let question = "needs-reply"
+    }
 
     @ObservationIgnored private var tracker = SessionEventTracker()
     @ObservationIgnored private var installed = false
@@ -63,7 +71,8 @@ final class Notifier: NSObject {
         for e in events {
             let row = rows.first { $0.name == e.name }
             let (title, body) = text(for: e, row: row)
-            post(NotificationKind(e.kind), name: e.name, title: title, body: body, selected: selected)
+            post(NotificationKind(e.kind), name: e.name, title: title, body: body, selected: selected,
+                 answer: e.kind == .needsYou ? answerable(row) : nil)
         }
     }
 
@@ -76,6 +85,17 @@ final class Notifier: NSObject {
     /// A subagent of `session` stopped (called by `SubagentStore` when a running subagent no longer runs).
     func subagentFinished(session: String, subagent: String) {
         post(.subagentFinished, name: session, title: "\(session): subagent finished", body: subagent, selected: nil)
+    }
+
+    /// Which answer buttons a "needs you" notification gets: Allow / Deny for a permission, a reply field for a
+    /// question; none for a session outside Switchboard's tmux (nothing to type into) or a multiple choice.
+    private func answerable(_ row: Row?) -> (category: String, tmux: String)? {
+        guard let row, let tmux = row.tmux, let now = NowLine(row.session, rank: 0) else { return nil }
+        switch now.kind {
+        case .permission: return (Category.permission, tmux)
+        case .question: return (Category.question, tmux)
+        default: return nil
+        }
     }
 
     private func text(for e: SessionEvent, row: Row?) -> (String, String) {
@@ -95,12 +115,13 @@ final class Notifier: NSObject {
     // MARK: Delivery
 
     /// `selected`: the session on screen; it gets no notification while Switchboard is in front.
-    private func post(_ kind: NotificationKind, name: String, title: String, body: String, selected: String?) {
+    private func post(_ kind: NotificationKind, name: String, title: String, body: String, selected: String?,
+                      answer: (category: String, tmux: String)? = nil) {
         let settings = AppSettings.shared
         guard settings.notifies(kind) else { return }
         if NSApp.isActive, settings.notifyOnlyInBackground || selected == name { return }
         guard hasCenter else { fallback(settings); return }
-        Task { await deliver(kind, name: name, title: title, body: body, sound: settings.notifySound) }
+        Task { await deliver(kind, name: name, title: title, body: body, sound: settings.notifySound, answer: answer) }
     }
 
     /// Without a bundle: bounce the Dock icon (macOS ignores it while the app is in front) and play the sound.
@@ -113,13 +134,25 @@ final class Notifier: NSObject {
         if settings.notifySound { NSSound(named: "Glass")?.play() }
     }
 
-    private func deliver(_ kind: NotificationKind, name: String, title: String, body: String, sound: Bool) async {
+    private func deliver(_ kind: NotificationKind, name: String, title: String, body: String, sound: Bool,
+                         answer: (category: String, tmux: String)?) async {
         guard await authorize() else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = sound ? .default : nil
-        content.userInfo = ["name": name, "tab": kind.tab.rawValue]
+        var info: [String: Any] = ["name": name, "tab": kind.tab.rawValue]
+        if let answer {
+            // the dialog as it is now: an answer button only acts on this very dialog, not on a later one
+            let tmux = answer.tmux
+            let shown = await Task.detached { SessionAnswer.dialog(tmux) }.value
+            if answer.category == Category.question || shown != nil {
+                content.categoryIdentifier = answer.category
+                info["tmux"] = tmux
+                if let shown { info["dialog"] = Self.fingerprint(shown) }
+            }
+        }
+        content.userInfo = info
         content.threadIdentifier = name
         // one per session and kind: a newer one replaces the older in Notification Center
         let request = UNNotificationRequest(identifier: "\(kind.rawValue)-\(name)", content: content, trigger: nil)
@@ -153,7 +186,44 @@ final class Notifier: NSObject {
     private func install() {
         guard !installed else { return }
         installed = true
-        UNUserNotificationCenter.current().delegate = self
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        // answer buttons; they act in the background, without bringing Switchboard forward
+        let allow = UNNotificationAction(identifier: "allow", title: "Allow")
+        let always = UNNotificationAction(identifier: "always", title: "Always Allow")
+        let deny = UNNotificationAction(identifier: "deny", title: "Deny", options: [.destructive])
+        let reply = UNTextInputNotificationAction(identifier: "reply", title: "Reply", options: [],
+                                                  textInputButtonTitle: "Send", textInputPlaceholder: "Reply to Claude")
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Category.permission, actions: [allow, always, deny], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Category.question, actions: [reply], intentIdentifiers: []),
+        ])
+    }
+
+    /// What identifies a dialog: its options and the text above them.
+    nonisolated static func fingerprint(_ d: ScreenDialog) -> String {
+        (d.context + d.options.map { "\($0.number). \($0.label)" }).joined(separator: "\n")
+    }
+
+    /// An answer button of a notification: sends it if the session still shows the same prompt, else says why not
+    /// and shows the session.
+    func perform(action: String, text: String?, info: [AnyHashable: Any]) {
+        guard let name = info["name"] as? String, let tmux = info["tmux"] as? String else { return }
+        let expected = info["dialog"] as? String
+        Task {
+            let err = await Task.detached { () -> String? in
+                if action == "reply" { return SessionAnswer.reply(text ?? "", tmux: tmux) }
+                guard let dialog = SessionAnswer.dialog(tmux) else { return "The prompt is no longer on the screen." }
+                guard Self.fingerprint(dialog) == expected else { return "The prompt changed since the notification." }
+                let choice: ScreenDialog.PermissionChoice = action == "deny" ? .deny : action == "always" ? .alwaysAllow : .allow
+                return SessionAnswer.choose(.permission(choice), expected: dialog, tmux: tmux)
+            }.value
+            if let err {
+                NSApp.activate(ignoringOtherApps: true)
+                open?(name, .info)
+                notice?("Couldn't answer \(name): \(err)")
+            }
+        }
     }
 
     /// System Settings → Notifications, for when the user said no at first.
@@ -186,6 +256,17 @@ extension Notifier: UNUserNotificationCenterDelegate {
         let info = response.notification.request.content.userInfo
         let name = info["name"] as? String
         let tab = (info["tab"] as? String).flatMap(DetailTab.init(rawValue:)) ?? .terminal
+        let action = response.actionIdentifier
+        if ["allow", "always", "deny", "reply"].contains(action) {
+            // an answer button: no window, just send it
+            let text = (response as? UNTextInputNotificationResponse)?.userText
+            nonisolated(unsafe) let sendable = info
+            Task { @MainActor in
+                Notifier.shared.perform(action: action, text: text, info: sendable)
+                completionHandler()
+            }
+            return
+        }
         Task { @MainActor in
             NSApp.activate(ignoringOtherApps: true)
             if let name { Notifier.shared.open?(name, tab) }

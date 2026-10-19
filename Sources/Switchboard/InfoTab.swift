@@ -82,6 +82,14 @@ private struct StatusSection: View {
                     }
                 }
             }
+            if status.rank == 0 {
+                if row.tmux != nil {
+                    AnswerPanel(row: row)
+                } else if s.alive {
+                    Text("It runs in another app's terminal: answer it there, or move it into Switchboard.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
             if let task = s.task {
                 LabeledContent {
                     // the state only when the status above doesn't already say it

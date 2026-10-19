@@ -101,6 +101,7 @@ final class Store {
             self?.selected = name
             if tab == .terminal { self?.focusTerminal() } else { self?.tab = tab }
         }
+        Notifier.shared.notice = { [weak self] text in self?.notice = text }
         Task { await refresh() }
         let home = StateBuilder.defaultClaudeHome
         watcher = Watcher(paths: ["sessions", "handover", "projects"].map { "\(home)/\($0)" }, delay: 1) { [weak self] in

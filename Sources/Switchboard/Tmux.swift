@@ -95,6 +95,18 @@ enum Tmux {
         return e.status == 0 ? nil : failure(e)
     }
 
+    /// The session's screen as text (what `ScreenDialog` reads); nil when tmux can't reach it.
+    static func capture(_ name: String) -> String? {
+        let r = run(SessionControl.captureArgs(name))
+        return r.status == 0 ? r.output : nil
+    }
+
+    /// Presses one key in the session ("1" picks the first option of a Claude Code dialog).
+    static func key(_ key: String, into name: String) -> String? {
+        let r = run(SessionControl.keyArgs(key, into: name))
+        return r.status == 0 ? nil : failure(r)
+    }
+
     /// Types text into the session without Enter (e.g. a file path from the folder sidebar).
     static func insert(_ text: String, into name: String) -> String? {
         let r = run(SessionControl.typeArgs(text, into: name)[0])
