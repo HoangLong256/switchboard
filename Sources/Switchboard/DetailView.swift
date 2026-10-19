@@ -118,7 +118,7 @@ struct ModelChip: View {
             }
             if let c = line?.costUSD { LabeledContent("Cost", value: UsageFormat.usd(c)) }
             if let line {
-                Text("From the status line, \(ago(ISO8601DateFormatter().string(from: line.writtenAt), now: store.now)).")
+                Text("From the status line, \(ago(line.writtenAt, now: store.now)).")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text(model == nil
@@ -384,59 +384,6 @@ struct NotesTab: View {
             if disk != saved { text = disk; saved = disk }
         }
         .onDisappear { Notes.write(root: root, session: name, text: text) }
-    }
-}
-
-struct InfoTab: View {
-    @EnvironmentObject private var store: Store
-    let row: Row
-
-    var body: some View {
-        let s = row.session
-        Form {
-            Section("Session") {
-                LabeledContent("Name", value: s.name)
-                LabeledContent("Status", value: row.status.label)
-                if let w = s.waitingFor { LabeledContent("Waiting for", value: w) }
-                LabeledContent("Project", value: s.project.isEmpty ? "–" : s.project)
-                if let b = s.branch { LabeledContent("Branch", value: b) }
-                if let cwd = store.folder(of: row) {
-                    LabeledContent("Folder") {
-                        HStack {
-                            Text(abbreviated(cwd)).textSelection(.enabled)
-                            Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: cwd)]) }
-                        }
-                    }
-                }
-                if let pid = s.pid { LabeledContent("PID", value: String(pid)) }
-                if let t = row.tmux { LabeledContent("tmux", value: "-L \(Tmux.socket) =\(t):") }
-                if let p = s.contextPercent { LabeledContent("Context used", value: "\(Int(p.rounded())) %") }
-                if s.backgroundTasks > 0 { LabeledContent("Background tasks", value: String(s.backgroundTasks)) }
-                if s.remoteControl { LabeledContent("Remote Control", value: "connected") }
-            }
-            if let hit = s.limitHit { LimitSection(row: row, hit: hit) }
-            SessionUsageSection(session: s)
-            if let now = NowLine(s, rank: row.status.rank) {
-                Section("Now") {
-                    Text(now.text).textSelection(.enabled)
-                    if let d = now.detail { Text(d).font(.caption.monospaced()).foregroundStyle(.secondary) }
-                    if !now.options.isEmpty {
-                        ForEach(now.options, id: \.self) { Text("• \($0)").foregroundStyle(.secondary) }
-                    }
-                }
-            }
-            if let u = s.lastUser {
-                Section("Last message from you · \(ago(u.at, now: store.now))") { Text(u.text).textSelection(.enabled) }
-            }
-            if let a = s.lastAssistant {
-                Section("Last reply · \(ago(a.at, now: store.now))") { Text(a.text).textSelection(.enabled) }
-            }
-            if !s.errors.isEmpty {
-                Section("Problems") { ForEach(s.errors, id: \.self) { Text($0).foregroundStyle(Palette.need) } }
-            }
-        }
-        .formStyle(.grouped)
-        .themeBackground()
     }
 }
 

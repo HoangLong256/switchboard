@@ -198,69 +198,6 @@ extension UsagePeriod {
     }
 }
 
-/// Usage of one session, for the Info tab: its tokens (transcripts) and what Claude Code reported (status line).
-struct SessionUsageSection: View {
-    @EnvironmentObject private var usage: UsageStore
-    @EnvironmentObject private var store: Store
-    let session: Session
-
-    var body: some View {
-        let total = usage.tokens(session), today = usage.tokensToday(session), line = usage.line(session)
-        Section {
-            if let total {
-                Grid(alignment: .trailing, horizontalSpacing: 18, verticalSpacing: 6) {
-                    GridRow {
-                        Text("").gridColumnAlignment(.leading)
-                        Text("Today").foregroundStyle(.secondary)
-                        Text("31 days").foregroundStyle(.secondary)
-                    }
-                    row("Input", \.input, today, total)
-                    row("Output", \.output, today, total)
-                    row("Cache writes", \.cacheCreation, today, total)
-                    row("Cache reads", \.cacheRead, today, total)
-                    Divider().gridCellUnsizedAxes(.horizontal)
-                    row("Total", \.total, today, total, bold: true)
-                    GridRow {
-                        Text("API $").fontWeight(.medium)
-                        Text(UsageFormat.usd(today?.usd ?? 0))
-                        Text(UsageFormat.usd(total.usd)).fontWeight(.medium)
-                    }
-                }
-                .monospacedDigit()
-            } else if usage.stats == nil {
-                HStack { ProgressView().controlSize(.small); Text("Reading transcripts…").foregroundStyle(.secondary) }
-            } else {
-                Text(session.sessionId == nil ? "Not a Claude session." : "No tokens in the last 31 days.").foregroundStyle(.secondary)
-            }
-            if let line {
-                if let c = line.costUSD { LabeledContent("Cost reported by Claude Code", value: UsageFormat.usd(c)) }
-                if let t = line.contextTokens, let w = line.contextWindow {
-                    LabeledContent("In context", value: "\(UsageFormat.tokens(t)) of \(UsageFormat.tokens(w))")
-                }
-                if let m = line.model { LabeledContent("Model", value: m) }
-                if let e = line.effort { LabeledContent("Effort", value: e) }
-                if let a = line.linesAdded, let r = line.linesRemoved { LabeledContent("Lines", value: "+\(a) −\(r)") }
-                Text("Status line updated \(ago(ISO8601DateFormatter().string(from: line.writtenAt), now: store.now))")
-                    .font(.caption).foregroundStyle(.tertiary)
-            }
-        } header: {
-            Text("Usage")
-        } footer: {
-            Text("Tokens are counted from this session's transcript and its subagents. API $ is the value at API list prices.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    private func row(_ name: String, _ key: KeyPath<TokenCounts, Int>, _ today: TokenCounts?, _ total: TokenCounts,
-                     bold: Bool = false) -> some View {
-        GridRow {
-            Text(name).fontWeight(bold ? .medium : .regular)
-            Text(UsageFormat.tokens(today?[keyPath: key] ?? 0))
-            Text(UsageFormat.tokens(total[keyPath: key])).fontWeight(bold ? .medium : .regular)
-        }
-    }
-}
-
 private enum PaceArrow {
     static func text(_ pace: PlanLimits.Pace) -> Text {
         let symbol = switch pace.outlook {
