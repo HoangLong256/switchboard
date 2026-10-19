@@ -181,6 +181,9 @@ public enum StateBuilder {
             seen.insert(e.name)
         }
 
+        // the sessions read above are the ones that exist; the cache forgets the rest
+        cache?.sweep()
+
         for (name, h) in handovers where !seen.contains(name) {
             let project = h.project ?? ""
             sessions.append(Session(
