@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SessionCore
 import SwiftUI
 import UserNotifications
@@ -27,20 +28,21 @@ enum NotificationKind: String, CaseIterable, Identifiable {
 /// `UNUserNotificationCenter` only works inside an app bundle. Run as a bare executable (`swift run`), the app
 /// has no bundle identifier and the center would crash, so it bounces the Dock icon instead.
 @MainActor
-final class Notifier: NSObject, ObservableObject {
+@Observable
+final class Notifier: NSObject {
     static let shared = Notifier()
 
     /// the system's answer; nil until asked (lazily, the first time a notification is due or a kind is turned on)
-    @Published private(set) var authorization: UNAuthorizationStatus?
+    private(set) var authorization: UNAuthorizationStatus?
     /// false as a bare executable: no notification center, only the Dock icon and a sound
     let hasCenter = Bundle.main.bundleIdentifier != nil
     /// set by the Store: shows the session (and tab) of a clicked notification
-    var open: ((String, DetailTab) -> Void)?
+    @ObservationIgnored var open: ((String, DetailTab) -> Void)?
 
-    private var tracker = SessionEventTracker()
-    private var installed = false
-    private var warnedOnce = false
-    private var badge: String?
+    @ObservationIgnored private var tracker = SessionEventTracker()
+    @ObservationIgnored private var installed = false
+    @ObservationIgnored private var warnedOnce = false
+    @ObservationIgnored private var badge: String?
 
     var denied: Bool { authorization == .denied }
 
@@ -194,8 +196,8 @@ extension Notifier: UNUserNotificationCenterDelegate {
 
 /// Settings → Notifications: one switch per kind, sound, Dock badge, and a hint when macOS denied them.
 struct NotificationSettings: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var notifier = Notifier.shared
+    @Bindable private var settings = AppSettings.shared
+    private var notifier: Notifier { .shared }
 
     private var anyOn: Bool {
         settings.notifyNeedsYou || settings.notifyFinished || settings.notifyUsageLimit

@@ -8,9 +8,9 @@ import SwiftUI
 /// Return keeps it open and moves focus into the editor, arrow keys only move the selection, Space previews.
 /// Folders open and close with a click or ←/→.
 struct FolderSidebar: View {
-    @EnvironmentObject private var store: Store
-    @StateObject private var model = FolderModel()
-    @ObservedObject private var editors = EditorStore.shared
+    @Environment(Store.self) private var store
+    @State private var model = FolderModel()
+    private var editors: EditorStore { .shared }
     /// highlighted row in the tree (keyboard focus), not necessarily the open file
     @State private var selection: String?
     @State private var lookingUp = false
@@ -35,7 +35,7 @@ struct FolderSidebar: View {
         .themeBackground(sidebar: true)
         .frame(minWidth: 220)
         // re-run when the selection or its folder changes (the folder may only be known after the first refresh)
-        .task(id: "\(store.selected ?? "")|\(store.selectedRow.flatMap(store.folder) ?? "")") { await follow() }
+        .task(id: "\(store.selected ?? "")|\(store.selectedFolder ?? "")") { await follow() }
         .toolbar { toolbarButtons }
     }
 
@@ -50,7 +50,7 @@ struct FolderSidebar: View {
                 refreshButton("Refresh Changes")
             } else {
                 // a fixed label (the tooltip goes by it); the icon and the toggle's highlight show the state
-                Toggle(isOn: $model.showHidden) {
+                Toggle(isOn: Bindable(model).showHidden) {
                     Label("Hidden Files", systemImage: model.showHidden ? "eye" : "eye.slash")
                 }
                 .disabled(model.root == nil)
@@ -110,7 +110,7 @@ struct FolderSidebar: View {
                 }
                 if !model.worktrees.isEmpty { worktreePicker(root) }
                 if mode == .explorer {
-                    TextField("Filter", text: $model.filter)
+                    TextField("Filter", text: Bindable(model).filter)
                         .textFieldStyle(.roundedBorder).controlSize(.small)
                 }
             } else {
@@ -122,7 +122,7 @@ struct FolderSidebar: View {
 
     @ViewBuilder
     private var content: some View {
-        if store.selectedRow == nil {
+        if store.selected == nil {
             placeholder("sidebar.left", "No session selected", "Select a session to see its folder.")
         } else if model.root == nil {
             if lookingUp { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
@@ -196,7 +196,7 @@ struct FolderSidebar: View {
             ForEach(model.worktrees) { w in
                 Button {
                     guard let name = store.selected else { return }
-                    let own = store.selectedRow.flatMap(store.folder).map(FolderListing.realPath)
+                    let own = store.selectedFolder.map(FolderListing.realPath)
                     worktreeOf[name] = w.path == own ? nil : w.path
                     model.show(w.path)
                 } label: {
@@ -226,7 +226,7 @@ struct FolderSidebar: View {
         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: e.path)]) }
         Divider()
         Button("Insert @Path into Terminal") { store.insertIntoTerminal("@\(relative(e.path)) ") }
-            .disabled(store.selectedRow?.tmux == nil)
+            .disabled(store.selectedTmux == nil)
         Button("Copy Relative Path") { copy(relative(e.path)) }
         Button("Copy Full Path") { copy(e.path) }
     }

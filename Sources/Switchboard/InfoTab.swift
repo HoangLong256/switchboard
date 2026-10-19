@@ -6,8 +6,8 @@ import SwiftUI
 /// The selected session at a glance, most useful first: its state and what it needs, the conversation, context
 /// and cost, then tokens and technical details. The header above already shows the name, folder and branch.
 struct InfoTab: View {
-    @EnvironmentObject private var store: Store
-    @EnvironmentObject private var usage: UsageStore
+    @Environment(Store.self) private var store
+    @Environment(UsageStore.self) private var usage
     let row: Row
 
     var body: some View {
@@ -46,7 +46,7 @@ private struct RowLabel: LabelStyle {
 
 /// State, time in it, what the session needs or does now, its task, and the one action that fits.
 private struct StatusSection: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let row: Row
 
     var body: some View {
@@ -149,7 +149,7 @@ private struct Callout: View {
 // MARK: Conversation
 
 private struct ConversationSection: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let session: Session
 
     var body: some View {
@@ -191,8 +191,8 @@ private struct Message: View {
 // MARK: Context and cost
 
 private struct ContextCostSection: View {
-    @EnvironmentObject private var usage: UsageStore
-    @EnvironmentObject private var store: Store
+    @Environment(UsageStore.self) private var usage
+    @Environment(Store.self) private var store
     let session: Session
 
     var body: some View {
@@ -286,7 +286,7 @@ private struct ContextBar: View {
 
 /// The token breakdown, folded away by default (most people want the totals above).
 private struct TokensSection: View {
-    @EnvironmentObject private var usage: UsageStore
+    @Environment(UsageStore.self) private var usage
     @AppStorage("infoTokensOpen") private var open = false
     let session: Session
 
@@ -353,7 +353,7 @@ private struct TokensSection: View {
 
 /// Where the session lives and how to reach it from elsewhere, each with a copy button.
 private struct DetailsSection: View {
-    @EnvironmentObject private var store: Store
+    @Environment(Store.self) private var store
     let row: Row
 
     var body: some View {

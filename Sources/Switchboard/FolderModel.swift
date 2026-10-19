@@ -1,35 +1,38 @@
 import FolderKit
 import Foundation
+import Observation
 import SessionCore
 
 /// State of the folder sidebar for one root: loaded folders, open folders, git status. Changes on disk
 /// (a session writing files) reload the open folders and the git status.
 @MainActor
-final class FolderModel: ObservableObject {
-    @Published private(set) var root: String? { didSet { cachedRows = nil } }
-    @Published private(set) var children: [String: [FolderEntry]] = [:] { didSet { cachedRows = nil } }
-    @Published private(set) var git = GitStatus.empty
+@Observable
+final class FolderModel {
+    private(set) var root: String? { didSet { cachedRows = nil } }
+    private(set) var children: [String: [FolderEntry]] = [:] { didSet { cachedRows = nil } }
+    private(set) var git = GitStatus.empty
     /// staged and unstaged files for the Source Control view (only loaded while it shows)
-    @Published private(set) var changes = GitChanges.empty
-    @Published var wantsChanges = false { didSet { if wantsChanges && !oldValue { loadChanges() } } }
+    private(set) var changes = GitChanges.empty
+    var wantsChanges = false { didSet { if wantsChanges && !oldValue { loadChanges() } } }
     /// the last git action failed: its message
-    @Published var gitError: String?
+    var gitError: String?
     /// linked worktrees of the root's repository (empty with only one)
-    @Published private(set) var worktrees: [Worktree] = []
-    @Published var expanded: Set<String> = [] { didSet { cachedRows = nil; saveExpanded() } }
-    @Published var filter = "" { didSet { cachedRows = nil; if !filter.isEmpty { loadForFilter() } } }
-    @Published var showHidden = UserDefaults.standard.bool(forKey: "showHidden") {
+    private(set) var worktrees: [Worktree] = []
+    var expanded: Set<String> = [] { didSet { cachedRows = nil; saveExpanded() } }
+    var filter = "" { didSet { cachedRows = nil; if !filter.isEmpty { loadForFilter() } } }
+    var showHidden = UserDefaults.standard.bool(forKey: "showHidden") {
         didSet { UserDefaults.standard.set(showHidden, forKey: "showHidden"); reloadAll() }
     }
 
-    private var watcher: Watcher?
-    private var generation = 0
-    /// the tree as rows, built once per change instead of on every redraw of the sidebar
-    private var cachedRows: [FolderTree.Row]?
+    @ObservationIgnored private var watcher: Watcher?
+    @ObservationIgnored private var generation = 0
+    /// the tree as rows, built once per change instead of on every redraw of the sidebar (not observed: `rows`
+    /// fills it while a view reads it)
+    @ObservationIgnored private var cachedRows: [FolderTree.Row]?
     /// a reload with git status is running; another request waits for it instead of starting a second one
-    private var loadingGit = false
-    private var reloadAgain = false
-    private var loadingChanges = false
+    @ObservationIgnored private var loadingGit = false
+    @ObservationIgnored private var reloadAgain = false
+    @ObservationIgnored private var loadingChanges = false
 
     var rows: [FolderTree.Row] {
         if let cachedRows { return cachedRows }

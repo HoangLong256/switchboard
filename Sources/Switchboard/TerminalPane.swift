@@ -4,11 +4,15 @@ import SwiftUI
 
 /// SwiftTerm terminal attached to the session with `tmux attach`.
 /// Closing the view only ends the attach process; the tmux session keeps running.
-struct TmuxTerminal: NSViewRepresentable {
+/// Equatable: `updateNSView` runs when the session, the focus request, the theme or the appearance changes, not
+/// on every redraw of the detail column.
+struct TmuxTerminal: NSViewRepresentable, Equatable {
     let name: String
     let focusRequest: Int
     @Environment(\.colorScheme) private var scheme
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
+
+    static func == (a: TmuxTerminal, b: TmuxTerminal) -> Bool { a.name == b.name && a.focusRequest == b.focusRequest }
 
     final class Coordinator {
         var focusSeen = 0

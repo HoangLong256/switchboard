@@ -1,5 +1,6 @@
 import FolderKit
 import Foundation
+import Observation
 import SessionCore
 import SwiftUI
 
@@ -31,55 +32,67 @@ enum DetailTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// Observable (not ObservableObject): SwiftUI tracks which properties a view reads, so a refresh that changes
+/// `rows` no longer redraws views that only read `selected`, `tab` or `now`.
 @MainActor
-final class Store: ObservableObject {
-    @Published private(set) var rows: [Row] = []
-    @Published private(set) var error: String?
-    @Published private(set) var now = Date()
+@Observable
+final class Store {
+    private(set) var rows: [Row] = []
+    /// the selected session's row, kept apart from `rows` so the detail column only updates when its own row
+    /// changes, not when any session does (see `updateSelection`)
+    private(set) var selectedRow: Row?
+    /// the selected session's folder (`folder(of:)`), for the folder sidebar
+    private(set) var selectedFolder: String?
+    /// the selected session's tmux session, for the editor's "insert into terminal" buttons
+    private(set) var selectedTmux: String?
+    private(set) var error: String?
+    private(set) var now = Date()
     /// `--select <name>` preselects a session at launch, for trying things out
-    @Published var selected: String? = {
+    var selected: String? = {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--select"), i + 1 < args.count else { return nil }
         return args[i + 1]
     }() {
         didSet {
+            updateSelection()
             // open files belong to their session; another session may have none
             guard selected != oldValue, oldValue != nil else { return }
             if tab == .editor, EditorStore.shared.tabs(of: selected).paths.isEmpty { tab = .terminal }
         }
     }
     /// `--tab <name>` starts on that tab (for trying things out)
-    @Published var tab: DetailTab = {
+    var tab: DetailTab = {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--tab"), i + 1 < args.count,
            let t = DetailTab.allCases.first(where: { $0.rawValue.lowercased() == args[i + 1].lowercased() }) { return t }
         return args.contains("--open") ? .editor : .terminal
     }()
     /// `--open <path>` opens a file in the selected session at launch (for trying things out)
-    private var openAtLaunch: String? = {
+    @ObservationIgnored private var openAtLaunch: String? = {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--open"), i + 1 < args.count else { return nil }
         return args[i + 1]
     }()
-    @Published private(set) var favorites: [String] = UserDefaults.standard.stringArray(forKey: "favorites") ?? []
-    @Published var newSessionOpen = false
+    private(set) var favorites: [String] = UserDefaults.standard.stringArray(forKey: "favorites") ?? []
+    var newSessionOpen = false
     /// a session asked to move into Switchboard (confirmed in a dialog)
-    @Published var moveRequest: Row?
+    var moveRequest: Row?
     /// names of sessions being moved in right now
-    @Published private(set) var moving: Set<String> = []
-    @Published var notice: String?
+    private(set) var moving: Set<String> = []
+    var notice: String?
     /// Increment to make the terminal grab keyboard focus
-    @Published private(set) var focusRequest = 0
+    private(set) var focusRequest = 0
     /// Increment to re-attach the terminal (after the tmux session came back)
-    @Published private(set) var terminalEpoch = 0
+    private(set) var terminalEpoch = 0
 
-    private let transcripts = TranscriptCache()
-    private var watcher: Watcher?
-    private var timer: Timer?
-    private var refreshing = false
-    private var again = false
-    private var pickedInitial = false
-    /// start folders of offline sessions found in their transcripts (expensive, so once per name)
+    @ObservationIgnored private let transcripts = TranscriptCache()
+    @ObservationIgnored private var watcher: Watcher?
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var refreshing = false
+    @ObservationIgnored private var again = false
+    @ObservationIgnored private var pickedInitial = false
+    /// start folders of offline sessions found in their transcripts (expensive, so once per name); tracked,
+    /// because `folder(of:)` reads it in views
     private var foundFolders: [String: String?] = [:]
 
     init() {
@@ -99,7 +112,15 @@ final class Store: ObservableObject {
         }
     }
 
-    var selectedRow: Row? { rows.first { $0.name == selected } }
+    /// Keeps `selectedRow`, `selectedFolder` and `selectedTmux` in step with `rows`, `selected` and `foundFolders`,
+    /// changing each only when its value did (an unchanged value wakes no view).
+    private func updateSelection() {
+        let row = rows.first { $0.name == selected }
+        if row != selectedRow { selectedRow = row }
+        let folder = row.flatMap(folder(of:))
+        if folder != selectedFolder { selectedFolder = folder }
+        if row?.tmux != selectedTmux { selectedTmux = row?.tmux }
+    }
 
     func refresh() async {
         if refreshing { again = true; return }
@@ -135,7 +156,7 @@ final class Store: ObservableObject {
                 let items = { (rows: [Row]) in rows.map { SessionSelection.Item(name: $0.name, tmux: $0.tmux) } }
                 let next = SessionSelection.follow(selected, before: items(rows), after: items(built))
                 rows = built
-                if next != selected { selected = next }
+                if next != selected { selected = next } else { updateSelection() }
             }
             SubagentStore.shared.update(sessions: rows.map(\.session))
             let err = state.sessions.isEmpty && !state.errors.isEmpty ? state.errors.joined(separator: "\n") : nil
@@ -177,7 +198,7 @@ final class Store: ObservableObject {
         let name = row.name
         let found = await Task.detached { SessionFolder.find(name) }.value
         foundFolders[name] = found
-        objectWillChange.send()
+        updateSelection()
         return found
     }
 

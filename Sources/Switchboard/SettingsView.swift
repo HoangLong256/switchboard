@@ -3,9 +3,9 @@ import SwiftUI
 
 /// Settings (⌘,): keep the Mac awake, and continue sessions after a usage limit.
 struct SettingsView: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var awake = KeepAwake.shared
-    @ObservedObject private var resume = AutoContinue.shared
+    @Bindable private var settings = AppSettings.shared
+    private var awake: KeepAwake { .shared }
+    private var resume: AutoContinue { .shared }
     @AppStorage("editorTheme") private var editorTheme: EditorTheme = .automatic
     @AppStorage("sessionsGrouping") private var grouping: SessionGrouping = .none
     @AppStorage("showModelInTabs") private var showModel = true
@@ -136,10 +136,10 @@ struct SettingsView: View {
 
 /// Two quick switches at the bottom of the sessions column: keep awake and auto-continue, with what they do now.
 struct PowerToggles: View {
-    @ObservedObject private var settings = AppSettings.shared
+    @Bindable private var settings = AppSettings.shared
     @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
-    @ObservedObject private var awake = KeepAwake.shared
-    @ObservedObject private var resume = AutoContinue.shared
+    private var awake: KeepAwake { .shared }
+    private var resume: AutoContinue { .shared }
 
     var body: some View {
         HStack(spacing: 6) {
