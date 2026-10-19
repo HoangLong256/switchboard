@@ -9,6 +9,9 @@ final class DocumentModel: ObservableObject {
     @Published var doc: TextDocument
     /// the last save stopped because the file on disk is newer (VS Code's save conflict)
     @Published var conflict = false
+    /// counts the times the text was replaced from outside the editor (reload, revert, Open Anyway), so the
+    /// editor view takes the new text without comparing whole files on every update
+    private(set) var replacements = 0
     /// image files are shown, not edited
     let isImage: Bool
     var path: String { doc.path }
@@ -21,7 +24,12 @@ final class DocumentModel: ObservableObject {
         doc = isImage ? TextDocument(path: path) : TextDocument.open(path)
     }
 
-    func openAnyway() { doc = TextDocument.open(path, force: true) }
+    func openAnyway() { replace(TextDocument.open(path, force: true)) }
+
+    func replace(_ new: TextDocument) {
+        replacements += 1
+        doc = new
+    }
 }
 
 /// Open editors per session (VS Code's preview tabs), and the save / close / reload rules around them.
@@ -153,7 +161,9 @@ final class EditorStore: ObservableObject {
 
     func revert(_ path: String) {
         guard let m = documents[path] else { return }
-        m.doc.revert()
+        var d = m.doc
+        d.revert()
+        m.replace(d)
         m.conflict = false
     }
 
@@ -172,7 +182,7 @@ final class EditorStore: ObservableObject {
     private func followDisk() {
         for m in documents.values where !m.isImage {
             var d = m.doc
-            if d.reloadIfClean() { m.doc = d }
+            if d.reloadIfClean() { m.replace(d) }
         }
         for d in diffs.values { d.reloadIfChanged() }
     }

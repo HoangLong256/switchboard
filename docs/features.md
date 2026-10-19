@@ -4,6 +4,8 @@ This document tells you how to use Switchboard. For installation, see the [READM
 
 - [Sessions](#sessions)
 - [Session tabs](#session-tabs)
+- [Info tab](#info-tab)
+- [Subagents](#subagents)
 - [Handover](#handover)
 - [Sessions from other apps](#sessions-from-other-apps)
 - [Folder sidebar](#folder-sidebar)
@@ -12,6 +14,7 @@ This document tells you how to use Switchboard. For installation, see the [READM
 - [Themes](#themes)
 - [Agent teams](#agent-teams)
 - [Usage and plan limits](#usage-and-plan-limits)
+- [Notifications](#notifications)
 - [Keep awake](#keep-awake)
 - [Continue after a usage limit](#continue-after-a-usage-limit)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -40,6 +43,10 @@ The sessions that need you are at the top. Your favorite sessions are above the 
 4. Click **Create**.
 
 Switchboard starts a tmux session in the folder and runs `claude -n <name>`.
+
+When you type `/exit`, Claude stops but the terminal stays. The session stays selected and shows the status
+"Shell". Type `claude` to start again, or close the session. If the terminal closes too, Switchboard selects the
+next session.
 
 > [!NOTE]
 > Turn off **Start Claude right away** to only type the command. You can then change it before you push Enter.
@@ -70,9 +77,51 @@ line, the model comes from the last response in the transcript.
 | Team | The agent team of the session, if it has one. |
 | Handover | The status note of the session: its task, its state and what is left. See [Handover](#handover). |
 | Notes | Your notes for the session. Switchboard keeps them in `~/.switchboard/notes`. |
-| Info | The folder, branch, PID, context, usage and the last messages. |
+| Info | The state of the session, the conversation, context and cost, tokens and details. See [Info tab](#info-tab). |
 
-![The Info tab of a session that needs you, with sessions in groups by status (GitHub Light theme)](images/session-info.png)
+### Info tab
+
+The Info tab shows the most useful data first:
+
+1. **Status**: the state and the time in that state. If the session needs you, a box shows the full request.
+   A button opens the terminal, or moves or resumes the session.
+2. **Conversation**: your last message and the last reply of Claude. Click **Show More** for long messages.
+3. **Context and cost**: a bar shows how full the context is. The bar is green, orange from 65 %, and red from
+   85 %. The section also shows the cost, the model, the effort and the changed lines.
+4. **Tokens**: the tokens for today and for 31 days. Click the row to open it.
+5. **Details**: the folder, branch, session ID, process and the tmux command. Each row has a copy button.
+
+![The Info tab of a session that needs you](images/session-info.png)
+
+## Subagents
+
+Claude can start subagents (the Agent tool) to do part of the work. Switchboard shows them in two places:
+
+- **The session list**: each running subagent shows below its session, with its current step. Click it to see
+  its activity.
+- **The Info tab**: the Subagents section shows each running subagent with its type, model and time. It also
+  shows if the subagent runs in the background or in its own worktree. Subagents that finished in the last two
+  hours show below them.
+
+To show or hide the subagents in the session list, use View ▸ Show Running Subagents or Settings (⌘,).
+
+### Subagent activity
+
+Click a subagent in the session list or in the Info tab. A window shows what the subagent does:
+
+- The task that it got. Click **Show All** to read all of it.
+- Its messages.
+- Each tool call, with its command or file. Click **Show Result** to see the output. A failed call shows
+  **Show Error** in red.
+- A small indicator on the step that runs now.
+
+While the subagent runs, the window updates every two seconds. **Follow** keeps the newest step in view.
+Click **Show Transcript** to find the full transcript file in Finder.
+
+> [!NOTE]
+> Switchboard reads the subagents from `~/.claude/projects/<project>/<session>/subagents`. A foreground subagent
+> stops when its result is in the transcript. A background subagent stops when Claude Code reports that it is
+> complete.
 
 ## Handover
 
@@ -322,6 +371,35 @@ The live status line gives current limits, context and cost for each session.
 
 Switchboard copies `switchboard-statusline` to `~/.switchboard/bin`. Then it sets `statusLine` in
 `~/.claude/settings.json`. It makes a backup of the file first.
+
+## Notifications
+
+Switchboard sends a macOS notification when a session changes. Each kind has a switch in Settings (⌘,):
+
+| Kind | When | Default |
+|---|---|---|
+| Needs you | A session waits for a permission, a question or an answer. The text shows the request. | On |
+| Finished | A session worked for more than 20 seconds and is ready again. | On |
+| Usage limit | A session stops at a usage limit, or Switchboard continues it after the reset. | On |
+| Subagent finished | A subagent of a session stops. | On |
+| Session ended | A live session goes offline. | Off |
+
+Click a notification to go to the session. For "Needs you", Switchboard opens the Terminal tab.
+
+Switchboard does not send notifications at launch. It also does not send them for the selected session while
+Switchboard is the front app.
+
+In Settings, you can also:
+
+- Turn the sound off.
+- Send notifications only while Switchboard is in the background.
+- Show the number of sessions that need you on the Dock icon.
+
+macOS asks for permission the first time. If you refuse, Settings shows a button to open System Settings.
+
+> [!NOTE]
+> Notifications need the app bundle (`Switchboard.app`). If you start Switchboard with `swift run`, it only
+> bounces the Dock icon.
 
 ## Keep awake
 

@@ -2,3 +2,6 @@
 .swiftpm/
 *.app
 dist/
+
+# git worktrees made by Claude Code agents
+.claude/worktrees/

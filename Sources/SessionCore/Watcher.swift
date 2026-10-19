@@ -9,18 +9,28 @@ public final class Watcher {
     private let queue = DispatchQueue(label: "switchboard.watcher")
     private let delay: TimeInterval
     private let onChange: @Sendable () -> Void
+    /// paths whose changes don't count (e.g. git's own writes inside `.git/`)
+    private let ignore: (@Sendable (String) -> Bool)?
     private var scheduled = false   // only on `queue`
 
-    public init(paths: [String], delay: TimeInterval = 0.2, onChange: @escaping @Sendable () -> Void) {
+    public init(paths: [String], delay: TimeInterval = 0.2, ignore: (@Sendable (String) -> Bool)? = nil,
+                onChange: @escaping @Sendable () -> Void) {
         self.delay = delay
         self.onChange = onChange
+        self.ignore = ignore
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
                                            retain: nil, release: nil, copyDescription: nil)
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+        let callback: FSEventStreamCallback = { _, info, count, paths, _, _ in
             guard let info else { return }
-            Unmanaged<Watcher>.fromOpaque(info).takeUnretainedValue().eventArrived()
+            let watcher = Unmanaged<Watcher>.fromOpaque(info).takeUnretainedValue()
+            if let ignore = watcher.ignore {
+                let list = Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as? [String] ?? []
+                guard list.prefix(count).contains(where: { !ignore($0) }) else { return }
+            }
+            watcher.eventArrived()
         }
-        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer
+                                             | kFSEventStreamCreateFlagUseCFTypes)
         stream = FSEventStreamCreate(nil, callback, &context, paths as CFArray,
                                      FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.05, flags)
         if let stream {

@@ -223,7 +223,7 @@ struct TeamTab: View {
                     Text("\(m.from) → \(m.to)").fontWeight(.medium)
                     Text(m.summary.isEmpty ? (m.kind ?? "") : m.summary).foregroundStyle(.secondary).lineLimit(2)
                     Spacer()
-                    if let at = m.at { Text(ago(ISO8601DateFormatter().string(from: at), now: store.now)).font(.caption).foregroundStyle(.tertiary) }
+                    if let at = m.at { Text(ago(at, now: store.now)).font(.caption).foregroundStyle(.tertiary) }
                 }
                 .font(.callout)
             }

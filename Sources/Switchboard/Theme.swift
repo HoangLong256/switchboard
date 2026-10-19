@@ -62,6 +62,11 @@ struct Status: Equatable {
 /// "<1 min", "12 min", "3 h", "2 d" for "time in status".
 func dur(_ iso: String?, now: Date = Date()) -> String {
     guard let iso, let d = parseISO(iso) else { return "" }
+    return dur(d, now: now)
+}
+
+/// `dur` for a date (no formatter round trip: these run on every redraw).
+func dur(_ d: Date, now: Date = Date()) -> String {
     let s = max(0, now.timeIntervalSince(d))
     if s < 60 { return "<1 min" }
     if s < 3600 { return "\(Int((s / 60).rounded())) min" }
@@ -72,6 +77,11 @@ func dur(_ iso: String?, now: Date = Date()) -> String {
 func ago(_ iso: String?, now: Date = Date()) -> String {
     let d = dur(iso, now: now)
     return d.isEmpty ? "" : (d == "<1 min" ? "just now" : "\(d) ago")
+}
+
+func ago(_ date: Date, now: Date = Date()) -> String {
+    let d = dur(date, now: now)
+    return d == "<1 min" ? "just now" : "\(d) ago"
 }
 
 /// `~/…` instead of the home folder, for paths shown in the UI.

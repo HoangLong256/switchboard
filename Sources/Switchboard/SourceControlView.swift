@@ -11,6 +11,9 @@ struct SourceControlView: View {
     @State private var message = ""
     @State private var committing = false
     @State private var confirmDiscard: [GitChanges.Entry]?
+    /// staging by another program (`git add` in a session) only touches `.git/index`, which the folder watcher
+    /// ignores, so the list looks again every few seconds while it is shown
+    private let tick = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
 
     private var changes: GitChanges { model.changes }
 
@@ -28,6 +31,7 @@ struct SourceControlView: View {
             }
         }
         .onAppear { model.wantsChanges = true }
+        .onReceive(tick) { _ in model.loadChanges() }
         .onDisappear { model.wantsChanges = false }
         .alert("Git", isPresented: Binding(get: { model.gitError != nil }, set: { if !$0 { model.gitError = nil } })) {
             Button("OK") { model.gitError = nil }

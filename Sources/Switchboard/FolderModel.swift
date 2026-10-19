@@ -6,8 +6,8 @@ import SessionCore
 /// (a session writing files) reload the open folders and the git status.
 @MainActor
 final class FolderModel: ObservableObject {
-    @Published private(set) var root: String?
-    @Published private(set) var children: [String: [FolderEntry]] = [:]
+    @Published private(set) var root: String? { didSet { cachedRows = nil } }
+    @Published private(set) var children: [String: [FolderEntry]] = [:] { didSet { cachedRows = nil } }
     @Published private(set) var git = GitStatus.empty
     /// staged and unstaged files for the Source Control view (only loaded while it shows)
     @Published private(set) var changes = GitChanges.empty
@@ -16,18 +16,35 @@ final class FolderModel: ObservableObject {
     @Published var gitError: String?
     /// linked worktrees of the root's repository (empty with only one)
     @Published private(set) var worktrees: [Worktree] = []
-    @Published var expanded: Set<String> = [] { didSet { saveExpanded() } }
-    @Published var filter = "" { didSet { if !filter.isEmpty { loadForFilter() } } }
+    @Published var expanded: Set<String> = [] { didSet { cachedRows = nil; saveExpanded() } }
+    @Published var filter = "" { didSet { cachedRows = nil; if !filter.isEmpty { loadForFilter() } } }
     @Published var showHidden = UserDefaults.standard.bool(forKey: "showHidden") {
         didSet { UserDefaults.standard.set(showHidden, forKey: "showHidden"); reloadAll() }
     }
 
     private var watcher: Watcher?
     private var generation = 0
+    /// the tree as rows, built once per change instead of on every redraw of the sidebar
+    private var cachedRows: [FolderTree.Row]?
+    /// a reload with git status is running; another request waits for it instead of starting a second one
+    private var loadingGit = false
+    private var reloadAgain = false
+    private var loadingChanges = false
 
     var rows: [FolderTree.Row] {
+        if let cachedRows { return cachedRows }
         guard let root else { return [] }
-        return FolderTree.rows(root: root, children: children, expanded: expanded, filter: filter)
+        let r = FolderTree.rows(root: root, children: children, expanded: expanded, filter: filter)
+        cachedRows = r
+        return r
+    }
+
+    /// Changes inside `.git/` that don't change what the sidebar shows: `git status` itself rewrites the index,
+    /// which would otherwise trigger the next reload. HEAD and refs still count (commits, branch switches).
+    nonisolated static func ignored(_ path: String) -> Bool {
+        guard let r = path.range(of: "/.git/") else { return false }
+        let inside = path[r.upperBound...]
+        return !(inside == "HEAD" || inside.hasPrefix("refs/"))
     }
 
     /// Shows `folder` (nil clears the sidebar). Open folders are remembered per root.
@@ -45,7 +62,7 @@ final class FolderModel: ObservableObject {
         guard let real else { return }
         expanded = Set(UserDefaults.standard.stringArray(forKey: Self.expandedKey(real)) ?? [])
         reloadAll()
-        watcher = Watcher(paths: [real], delay: 0.6) { [weak self] in
+        watcher = Watcher(paths: [real], delay: 0.6, ignore: Self.ignored) { [weak self] in
             Task { @MainActor in self?.reloadAll() }
         }
     }
@@ -75,15 +92,19 @@ final class FolderModel: ObservableObject {
     /// Reloads the root, every open folder, and git status.
     func reloadAll() {
         guard let root else { return }
+        // a big repository's git status can outlast the next file event: run one at a time, then once more
+        guard !loadingGit else { reloadAgain = true; return }
         load([root] + expanded.filter { $0.hasPrefix(root + "/") }, withGit: true)
         if wantsChanges { loadChanges() }
     }
 
     func loadChanges() {
-        guard let root else { return }
+        guard let root, !loadingChanges else { return }
         let gen = generation
+        loadingChanges = true
         Task {
             let c = await Task.detached { GitChanges.load(folder: root) }.value
+            loadingChanges = false
             guard gen == generation else { return }
             if c != changes { changes = c }
         }
@@ -117,7 +138,14 @@ final class FolderModel: ObservableObject {
     private func load(_ dirs: [String], withGit: Bool = false) {
         guard let root, !dirs.isEmpty || withGit else { return }
         let gen = generation, hidden = showHidden
+        if withGit { loadingGit = true }
         Task {
+            defer {
+                if withGit {
+                    loadingGit = false
+                    if reloadAgain { reloadAgain = false; reloadAll() }
+                }
+            }
             let (lists, status, trees) = await Task.detached {
                 (dirs.map { ($0, FolderListing.list($0, showHidden: hidden)) },
                  withGit ? GitStatus.load(folder: root) : nil,

@@ -377,7 +377,10 @@ struct CodeEditor: NSViewRepresentable {
         var focusSeen = 0
         var palette: EditorPalette?
         let language: SyntaxTokens.Language?
+        /// `model.replacements` the view has taken
+        var replacementsSeen = 0
         private var coloring = false
+        private var pendingColor: DispatchWorkItem?
         init(model: DocumentModel, language: SyntaxTokens.Language?) {
             self.model = model
             self.language = language
@@ -393,9 +396,26 @@ struct CodeEditor: NSViewRepresentable {
             }
         }
 
-        /// Once per run loop pass, however many edits came in (pasting, undo of many steps).
+        /// Large files re-color after a pause in typing: tokenizing the whole file on every key stalls the editor.
+        static let largeText = 60_000
+
+        /// Once per run loop pass, however many edits came in (pasting, undo of many steps); for large files
+        /// once typing pauses.
         @MainActor func recolor(_ tv: NSTextView) {
-            guard !coloring, let palette else { return }
+            guard let palette else { return }
+            if (tv.string as NSString).length > Self.largeText {
+                pendingColor?.cancel()
+                let work = DispatchWorkItem { [weak self, weak tv] in
+                    MainActor.assumeIsolated {
+                        guard let self, let tv else { return }
+                        SyntaxColoring.apply(tv, palette: palette, language: self.language)
+                    }
+                }
+                pendingColor = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+                return
+            }
+            guard !coloring else { return }
             coloring = true
             DispatchQueue.main.async { [weak self, weak tv] in
                 MainActor.assumeIsolated {
@@ -447,6 +467,7 @@ struct CodeEditor: NSViewRepresentable {
         tv.textContainerInset = NSSize(width: GutterTextView.gutter, height: 6)
         Self.style(tv, scroll: scroll, palette)
         context.coordinator.palette = palette
+        context.coordinator.replacementsSeen = model.replacements
         Self.setText(tv, model.doc.text, palette)
         SyntaxColoring.apply(tv, palette: palette, language: context.coordinator.language)
         tv.delegate = context.coordinator
@@ -466,8 +487,10 @@ struct CodeEditor: NSViewRepresentable {
             SyntaxColoring.apply(tv, palette: palette, language: context.coordinator.language)
             tv.needsDisplay = true
         }
-        // reloaded from disk (or reverted): take the new text, keep the selection and scroll position
-        if tv.string != model.doc.text {
+        // reloaded from disk (or reverted): take the new text, keep the selection and scroll position. A counter,
+        // not a text comparison: this runs on every update of the window, and `tv.string` copies the whole file
+        if context.coordinator.replacementsSeen != model.replacements {
+            context.coordinator.replacementsSeen = model.replacements
             let sel = tv.selectedRanges
             let origin = scroll.contentView.bounds.origin
             Self.setText(tv, model.doc.text, palette)

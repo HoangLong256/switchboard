@@ -17,4 +17,10 @@ commit in `UPSTREAM_COMMIT`). Changes since:
   the session a command runs in from its parent processes, and `HandoverSetup` for the CLAUDE.md section and
   the permission rule.
 - `ModelName.swift`, `SessionGroups.swift`, `MoveIn.swift` (new): short model names, grouping, moving sessions in.
+- `Subagents.swift` (new), `Transcript.swift`: the subagents of a session and whether they still run
+  (`taskStates`, `toolResultIds`).
+- `SessionSelection.swift` (new): row identity by tmux session, and the selection after the rows change
+  (`/exit`, restart, rename, terminal closed).
+- `SessionEvents.swift` (new): `SessionEventTracker` finds the changes between two refreshes (needs you,
+  finished, usage limit, ended) for the app's notifications.
 - Comments and identifiers no longer refer to the upstream app.
