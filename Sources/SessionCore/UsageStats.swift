@@ -169,6 +169,9 @@ public final class UsageScanner: @unchecked Sendable {
     private var records: [String: UsageRecord] = [:]
     /// session id → name from `custom-title` / `agent-name` lines
     private var titles: [String: String] = [:]
+    /// one copy of each session id, model and project name per scan: every record of a session would otherwise
+    /// hold its own (a month of records is the largest thing the app keeps)
+    private var interned: [String: String] = [:]
 
     public init(projectsDir: String = "\(StateBuilder.defaultClaudeHome)/projects",
                 devRoot: String = Project.defaultDevRoot, calendar: Calendar = .current) {
@@ -187,13 +190,22 @@ public final class UsageScanner: @unchecked Sendable {
         defer { lock.unlock() }
         let cutoff = UsageStats.cutoff(now: now, calendar: calendar)
         var seen = Set<String>()
+        interned.removeAll(keepingCapacity: true)
         for (path, attrs, project) in transcriptFiles(modifiedAfter: cutoff) {
             seen.insert(path)
-            read(path, attrs: attrs, fallbackProject: project)
+            // the whole scan is one block on its queue: without a pool per file, what Foundation autoreleases
+            // while reading a month of transcripts would pile up until the scan ends
+            autoreleasepool { read(path, attrs: attrs, fallbackProject: project) }
         }
         files = files.filter { seen.contains($0.key) }
         records = records.filter { $0.value.at >= cutoff }
         return UsageStats.aggregate(records.values, titles: titles, now: now, calendar: calendar)
+    }
+
+    private func intern(_ s: String) -> String {
+        if let known = interned[s] { return known }
+        interned[s] = s
+        return s
     }
 
     // MARK: Files
@@ -304,7 +316,8 @@ public final class UsageScanner: @unchecked Sendable {
             old.tokens = old.tokens.merged(r.tokens)
             records[r.key] = old
         } else {
-            records[r.key] = r
+            records[r.key] = UsageRecord(key: r.key, at: r.at, model: r.model.map(intern), project: intern(r.project),
+                                         sessionId: intern(r.sessionId), tokens: r.tokens)
         }
     }
 
