@@ -43,6 +43,15 @@ public struct EditorTabs: Equatable, Sendable {
         if active == path { active = paths.isEmpty ? nil : paths[min(i, paths.count - 1)] }
     }
 
+    /// Tabs that "Close Others" closes: all but `path`.
+    public func others(than path: String) -> [String] { paths.filter { $0 != path } }
+
+    /// Tabs that "Close to the Right" closes.
+    public func right(of path: String) -> [String] {
+        guard let i = paths.firstIndex(of: path) else { return [] }
+        return Array(paths[(i + 1)...])
+    }
+
     /// The file was renamed or moved on disk.
     public mutating func rename(_ old: String, to new: String) {
         guard let i = paths.firstIndex(of: old) else { return }

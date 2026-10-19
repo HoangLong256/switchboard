@@ -9,6 +9,11 @@ final class FolderModel: ObservableObject {
     @Published private(set) var root: String?
     @Published private(set) var children: [String: [FolderEntry]] = [:]
     @Published private(set) var git = GitStatus.empty
+    /// staged and unstaged files for the Source Control view (only loaded while it shows)
+    @Published private(set) var changes = GitChanges.empty
+    @Published var wantsChanges = false { didSet { if wantsChanges && !oldValue { loadChanges() } } }
+    /// the last git action failed: its message
+    @Published var gitError: String?
     /// linked worktrees of the root's repository (empty with only one)
     @Published private(set) var worktrees: [Worktree] = []
     @Published var expanded: Set<String> = [] { didSet { saveExpanded() } }
@@ -32,6 +37,7 @@ final class FolderModel: ObservableObject {
         root = real
         children = [:]
         git = .empty
+        changes = .empty
         worktrees = []
         filter = ""
         watcher = nil
@@ -70,6 +76,42 @@ final class FolderModel: ObservableObject {
     func reloadAll() {
         guard let root else { return }
         load([root] + expanded.filter { $0.hasPrefix(root + "/") }, withGit: true)
+        if wantsChanges { loadChanges() }
+    }
+
+    func loadChanges() {
+        guard let root else { return }
+        let gen = generation
+        Task {
+            let c = await Task.detached { GitChanges.load(folder: root) }.value
+            guard gen == generation else { return }
+            if c != changes { changes = c }
+        }
+    }
+
+    // MARK: Source Control actions
+
+    func stage(_ entries: [GitChanges.Entry]) { act { GitChanges.stage(entries.map(\.rel), repo: $0) } }
+    func unstage(_ entries: [GitChanges.Entry]) { act { GitChanges.unstage(entries.map(\.rel), repo: $0) } }
+    func discard(_ entries: [GitChanges.Entry]) { act { GitChanges.discard(entries, repo: $0) } }
+
+    /// Commits what is staged; true when it worked (the message field is cleared then).
+    func commit(_ message: String) async -> Bool {
+        guard let repo = changes.repoRoot else { return false }
+        let err = await Task.detached { GitChanges.commit(message: message, repo: repo) }.value
+        gitError = err
+        reloadAll()
+        return err == nil
+    }
+
+    /// Runs a git action off the main thread, then shows its error (if any) and the new state.
+    private func act(_ action: @escaping @Sendable (String) -> String?) {
+        guard let repo = changes.repoRoot else { return }
+        Task {
+            let err = await Task.detached { action(repo) }.value
+            if let err { gitError = err }
+            reloadAll()
+        }
     }
 
     private func load(_ dirs: [String], withGit: Bool = false) {

@@ -1,4 +1,4 @@
-import FolderKit
+@testable import FolderKit
 import XCTest
 
 final class FolderListingTests: XCTestCase {
@@ -171,5 +171,75 @@ final class WorktreeTests: XCTestCase {
         // git status sees the change from the worktree, too
         try Data("y".utf8).write(to: URL(fileURLWithPath: dir + "/feature/a.txt"))
         XCTAssertEqual(GitStatus.load(folder: dir + "/feature").files[dir + "/feature/a.txt"], .modified)
+    }
+}
+
+final class GitChangesTests: XCTestCase {
+    func testStagedUnstagedAndConflicts() {
+        let out = ["## main...origin/main", "M  staged.swift", " M edited.swift", "MM both.swift", "?? new.txt",
+                   "R  new name.md", "old name.md", "UU clash.swift", " D gone.swift"].joined(separator: "\0")
+        let c = GitChanges.parse(out, repoRoot: "/r")
+        XCTAssertEqual(c.branch, "main")
+        XCTAssertEqual(c.staged.map(\.rel), ["both.swift", "new name.md", "staged.swift"])
+        XCTAssertEqual(c.unstaged.map(\.rel), ["both.swift", "edited.swift", "gone.swift", "new.txt"])
+        XCTAssertEqual(c.conflicts.map(\.rel), ["clash.swift"])
+        XCTAssertEqual(c.entries.first { $0.rel == "new name.md" }?.oldRel, "old name.md")
+        XCTAssertEqual(c.entries.first { $0.rel == "new.txt" }?.unstaged, .untracked)
+        XCTAssertEqual(c.entries.first { $0.rel == "gone.swift" }?.unstaged, .deleted)
+        XCTAssertEqual(c.entries.first { $0.rel == "staged.swift" }?.path, "/r/staged.swift")
+    }
+
+    func testRealRepository() throws {
+        let dir = NSTemporaryDirectory() + "gc-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        _ = GitChanges.run(["init", "-q"], in: dir)
+        try "a\n".write(toFile: dir + "/a.txt", atomically: true, encoding: .utf8)
+        XCTAssertEqual(GitChanges.load(folder: dir).unstaged.map(\.rel), ["a.txt"])
+        XCTAssertNil(GitChanges.stage(["a.txt"], repo: dir))
+        XCTAssertEqual(GitChanges.load(folder: dir).staged.map(\.rel), ["a.txt"])
+        XCTAssertNil(GitChanges.unstage(["a.txt"], repo: dir))   // before the first commit
+        XCTAssertEqual(GitChanges.load(folder: dir).staged.map(\.rel), [])
+        XCTAssertNil(GitChanges.stage(["a.txt"], repo: dir))
+        _ = GitChanges.run(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "one"], in: dir)
+        try "b\n".write(toFile: dir + "/a.txt", atomically: true, encoding: .utf8)
+        XCTAssertEqual(String(decoding: GitChanges.contents("a.txt", repo: dir, fromIndex: false) ?? Data(), as: UTF8.self), "a\n")
+        let entry = try XCTUnwrap(GitChanges.load(folder: dir).unstaged.first)
+        XCTAssertNil(GitChanges.discard([entry], repo: dir))
+        XCTAssertEqual(try String(contentsOfFile: dir + "/a.txt", encoding: .utf8), "a\n")
+    }
+}
+
+final class LineDiffTests: XCTestCase {
+    func testPairsAChangedBlockAndKeepsNumbers() {
+        let rows = LineDiff.rows(old: ["a", "b", "c", "d"], new: ["a", "B", "c", "d", "e"])
+        XCTAssertEqual(rows.map(\.kind), [.same, .changed, .same, .same, .added])
+        XCTAssertEqual(rows[1].oldText, "b")
+        XCTAssertEqual(rows[1].newText, "B")
+        XCTAssertEqual(rows[4].newNumber, 5)
+        XCTAssertNil(rows[4].oldNumber)
+        XCTAssertEqual(LineDiff.stats(rows).added, 2)
+        XCTAssertEqual(LineDiff.stats(rows).removed, 1)
+    }
+
+    func testRemovedOnly() {
+        let rows = LineDiff.rows(old: ["a", "x", "y", "b"], new: ["a", "b"])
+        XCTAssertEqual(rows.map(\.kind), [.same, .removed, .removed, .same])
+    }
+
+    func testFoldsLongUnchangedRunsWithContext() {
+        let old = (1...30).map(String.init)
+        var new = old
+        new[14] = "changed"
+        let items = LineDiff.fold(LineDiff.rows(old: old, new: new))
+        // lines 1–11 folded, 12–14 context, the change, 16–18 context, 19–30 folded
+        XCTAssertEqual(items.first, .fold(0..<11))
+        XCTAssertEqual(items.last, .fold(18..<30))
+        XCTAssertEqual(items.count, 9)
+    }
+
+    func testLinesDropTheFinalNewline() {
+        XCTAssertEqual(LineDiff.lines("a\nb\n"), ["a", "b"])
+        XCTAssertEqual(LineDiff.lines(""), [])
     }
 }

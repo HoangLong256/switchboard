@@ -1,3 +1,4 @@
+import FolderKit
 import Foundation
 import SessionCore
 import SwiftUI
@@ -165,6 +166,13 @@ final class Store: ObservableObject {
         tab = .editor
     }
 
+    /// Source Control: a file's changes in a diff tab.
+    func openDiff(_ entry: GitChanges.Entry, repo: String, staged: Bool, pinned: Bool) {
+        guard let s = selected else { return }
+        EditorStore.shared.openDiff(entry, repo: repo, staged: staged, in: s, pinned: pinned)
+        tab = .editor
+    }
+
     func isFavorite(_ name: String) -> Bool { favorites.contains(name) }
 
     func toggleFavorite(_ name: String) {
@@ -189,9 +197,11 @@ final class Store: ObservableObject {
         focusTerminal()
     }
 
-    func startSession(name: String, folder: String, agentTeam: Bool = false) async {
+    func startSession(name: String, folder: String, agentTeam: Bool = false, start: Bool = true) async {
         let env = AppSettings.shared.newSessionEnvironment
-        let err = await Task.detached { Tmux.newSession(name: name, dir: folder, agentTeam: agentTeam, environment: env) }.value
+        let err = await Task.detached {
+            Tmux.newSession(name: name, dir: folder, agentTeam: agentTeam, environment: env, start: start)
+        }.value
         if let err { notice = err; return }
         await refresh()
         selected = name

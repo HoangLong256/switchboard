@@ -20,11 +20,24 @@ Claude Code's **agent teams**.
   handovers.
   - Sorted by what needs you first, with favorites on top. Each row has a status dot (needs you / working /
     ready / offline) and its tokens.
-  - Search, a context menu, and ⌘N for a new session: a tmux session with `claude -n <name>` typed in.
+  - Search, a context menu, and ⌘N for a new session: a tmux session that runs `claude -n <name>` right away
+    (or only types it in, if you turn off *Start Claude right away*). The name defaults to the folder's name.
+  - **Grouping**: group the sessions by parent folder (the folder their working folder is in, e.g. all
+    sessions under `~/Workplace/Personal Projects`) or by status (the group button in the toolbar, or Settings).
+    Each group is a section you can fold, with its size and how many sessions need you.
+  - The model and effort the selected session runs with ("Opus 5.5 · High") show next to its tabs; click for
+    context and cost. They come from the live status line, else the model of the transcript's last response.
 - **Folder sidebar**: the selected session's working directory as a tree.
   - It updates live as the session writes files, marks git changes (M / A / D / U), shows the branch, and
     offers a worktree picker for repositories with linked worktrees (`claude --worktree`).
   - A filter, and a toggle for hidden files.
+  - **File icon themes** like VS Code's: Seti (colored glyphs per language), Material (colored folders) or
+    Minimal. In Settings or View ▸ File Icon Theme. File names take their git color.
+- **Source Control**, like VS Code's: switch the folder sidebar from Explorer to Changes.
+  - Merge Changes, Staged Changes and Changes, with Stage (+), Unstage (−), Discard (to the Trash for new files)
+    per file or for all, and a commit box (⌘↩).
+  - A click opens the file's changes in a diff tab: side by side or inline, unchanged regions folded, in the
+    theme's colors. Staged changes compare HEAD with the index, the others the index with the file.
 - **Editor**, with the same rules as VS Code's Explorer and editor:
   - A single click previews a file in an *italic* tab that the next preview replaces, and focus stays in the
     tree. A double click or Return keeps it open and moves focus into the editor. Arrow keys only move the
@@ -32,6 +45,13 @@ Claude Code's **agent teams**.
   - Editing pins the tab. Unsaved changes show a dot on the tab and a count on the Editor tab ("Editor •2").
   - ⌘S saves, ⌥⌘S saves all. ⌘W closes the editor, asking Save / Don't Save / Cancel when there are changes.
     Quitting with unsaved files asks too.
+  - Right-click a tab, or use the "…" at the end of the tab bar: Close, Close Others (⌥⌘T), Close to the Right,
+    Close Saved, Close All (⌥⌘W). Unsaved files are asked about once, with Save All / Don't Save / Cancel.
+  - **Themes** for the whole app (sidebars, editor, and the terminal with its 16 ANSI colors), with the palettes
+    of the VS Code themes: Light / Dark Modern (Automatic keeps the macOS look), Dracula, One Dark Pro, Monokai,
+    GitHub Dark / Light, Nord, Solarized Dark / Light. A theme is light or dark by itself, so it takes over from
+    Appearance. Pick one from the palette button above the file, View ▸ Theme, or Settings. Code gets simple
+    syntax colors (comments, strings, numbers, keywords, types, calls).
   - Files a session changes on disk reload by themselves while you have no unsaved changes. If you do, saving
     stops with **Compare / Overwrite / Revert** instead of overwriting the session's work.
   - Binary, oddly encoded and very large files show a notice with **Open Anyway**. Markdown has a preview;
@@ -74,7 +94,7 @@ Claude Code's **agent teams**.
   - Info: folder, branch, PID, context, the "Now" line, and the last messages.
 
 Shortcuts: ⌘N new session · ⇧⌘H next waiting session · ⌘J focus terminal · ⌘1–6 tabs · ⌘S / ⌥⌘S save ·
-⌘W close editor · ⌘D favorite · ⌘R refresh · ⌘, settings.
+⌘W close editor · ⌥⌘T close others · ⌥⌘W close all · ⌘D favorite · ⌘R refresh · ⌘, settings.
 
 ## Download
 

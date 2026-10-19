@@ -19,21 +19,29 @@ struct EditorArea: View {
             }
             if let m = editors.activeDocument(of: session) {
                 DocumentView(model: m, session: session).id(m.path)
+            } else if let d = editors.activeDiff(of: session) {
+                DiffView(model: d, session: session).id(d.key)
             } else {
                 ContentUnavailableView("No open file", systemImage: "doc.text",
                                        description: Text("Click a file in the folder sidebar to preview it; double-click to keep it open."))
             }
         }
-        .alert("Do you want to save the changes you made to \(closeName)?", isPresented: closeBinding) {
-            Button("Save") { closeDirty(save: true) }
+        .alert(closeTitle, isPresented: closeBinding) {
+            Button(closeNames.count > 1 ? "Save All" : "Save") { closeDirty(save: true) }
             Button("Don't Save", role: .destructive) { closeDirty(save: false) }
             Button("Cancel", role: .cancel) { editors.closeRequest = nil }
         } message: {
-            Text("Your changes will be lost if you don't save them.")
+            Text((closeNames.count > 1 ? closeNames.joined(separator: "\n") + "\n\n" : "")
+                + "Your changes will be lost if you don't save them.")
         }
     }
 
-    private var closeName: String { ((editors.closeRequest?.path ?? "") as NSString).lastPathComponent }
+    private var closeNames: [String] { (editors.closeRequest?.paths ?? []).map { ($0 as NSString).lastPathComponent } }
+
+    private var closeTitle: String {
+        closeNames.count > 1 ? "Do you want to save the changes to the following \(closeNames.count) files?"
+            : "Do you want to save the changes you made to \(closeNames.first ?? "")?"
+    }
 
     private var closeBinding: Binding<Bool> {
         Binding(get: { editors.closeRequest?.session == session }, set: { if !$0 { editors.closeRequest = nil } })
@@ -42,35 +50,121 @@ struct EditorArea: View {
     private func closeDirty(save: Bool) {
         guard let r = editors.closeRequest else { return }
         editors.closeRequest = nil
-        if save, !editors.save(r.path) { return }   // conflict or error: keep the tab open
-        if !save { editors.revert(r.path) }
-        editors.close(r.path, in: r.session)
+        for path in r.paths {
+            if save, !editors.save(path) { continue }   // conflict or error: keep the tab open
+            if !save { editors.revert(path) }
+            editors.close(path, in: r.session)
+        }
     }
 }
 
 private struct TabStrip: View {
     @ObservedObject private var editors = EditorStore.shared
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     let session: String
     let tabs: EditorTabs
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(tabs.paths, id: \.self) { path in
-                    if let m = editors.documents[path] {
-                        TabItem(model: m, session: session, active: tabs.active == path, preview: tabs.preview == path)
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(tabs.paths, id: \.self) { path in
+                        if let m = editors.documents[path] {
+                            TabItem(model: m, session: session, active: tabs.active == path, preview: tabs.preview == path)
+                                .contextMenu { TabMenu(session: session, path: path, tabs: tabs) }
+                        } else if let d = editors.diffs[path] {
+                            DiffTabItem(model: d, session: session, active: tabs.active == path, preview: tabs.preview == path)
+                                .contextMenu { TabMenu(session: session, path: path, tabs: tabs) }
+                        }
+                        Divider().frame(height: 18)
                     }
-                    Divider().frame(height: 18)
                 }
             }
+            Divider().frame(height: 18)
+            // VS Code's "…" at the end of the tab bar
+            Menu {
+                if let active = tabs.active { TabMenu(session: session, path: active, tabs: tabs) }
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .help("Close Others, Close All, …")
         }
         .frame(height: 32)
-        .background(.bar)
+        .background(theme.themesApp ? AnyShapeStyle(Color(hex: theme.palette(dark: true).sidebar)) : AnyShapeStyle(.bar))
+    }
+}
+
+/// A diff tab: "Package.swift (Working Tree)" with the diff icon.
+private struct DiffTabItem: View {
+    @ObservedObject private var editors = EditorStore.shared
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
+    @Environment(\.colorScheme) private var scheme
+    let model: DiffModel
+    let session: String
+    let active: Bool
+    let preview: Bool
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            FileIconView(name: model.name)
+            Text(model.title).italic(preview).lineLimit(1)
+            Button { editors.requestClose(model.key, in: session) } label: {
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).frame(width: 14, height: 14)
+                    .opacity(hover || active ? 1 : 0)
+            }
+            .buttonStyle(.plain)
+            .help("Close (⌘W)")
+        }
+        .padding(.horizontal, 10).frame(height: 32)
+        .background(active ? Color(hex: theme.palette(dark: scheme == .dark).background) : .clear)
+        .overlay(alignment: .top) { if active { Rectangle().fill(Color.accentColor).frame(height: 2) } }
+        .contentShape(Rectangle())
+        .onHover { hover = $0 }
+        .onTapGesture(count: 2) { editors.pin(model.key, in: session) }
+        .onTapGesture { editors.activate(model.key, in: session) }
+        .help("\(model.entry.rel) – \(model.staged ? "staged changes (HEAD ↔ index)" : "changes in the working tree (index ↔ file)")")
+    }
+}
+
+/// Closing tabs, as in VS Code's tab context menu.
+struct TabMenu: View {
+    @ObservedObject private var editors = EditorStore.shared
+    let session: String
+    /// the tab's key: a file path, or a diff tab's key
+    let path: String
+    let tabs: EditorTabs
+
+    /// the file behind the tab
+    private var file: String { editors.diffs[path]?.path ?? path }
+
+    var body: some View {
+        Button("Close") { editors.requestClose(path, in: session) }
+        Button("Close Others") { editors.closeOthers(path, in: session) }
+            .disabled(tabs.others(than: path).isEmpty)
+        Button("Close to the Right") { editors.closeToTheRight(of: path, in: session) }
+            .disabled(tabs.right(of: path).isEmpty)
+        Button("Close Saved") { editors.closeSaved(in: session) }
+            .disabled(!tabs.paths.contains { editors.documents[$0]?.doc.isDirty != true })
+        Button("Close All") { editors.closeAll(in: session) }
+        Divider()
+        if tabs.preview == path { Button("Keep Open") { editors.pin(path, in: session) } }
+        Button("Copy Path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(file, forType: .string)
+        }
+        Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file)]) }
     }
 }
 
 private struct TabItem: View {
     @ObservedObject private var editors = EditorStore.shared
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
+    @Environment(\.colorScheme) private var scheme
     /// observed, so the dot for unsaved changes follows every keystroke
     @ObservedObject var model: DocumentModel
     let session: String
@@ -83,7 +177,7 @@ private struct TabItem: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "doc.text").font(.caption).foregroundStyle(.secondary)
+            FileIconView(name: (path as NSString).lastPathComponent)
             Text((path as NSString).lastPathComponent)
                 .italic(preview)
                 .lineLimit(1)
@@ -98,7 +192,8 @@ private struct TabItem: View {
             .help(dirty ? "Unsaved changes – close" : "Close (⌘W)")
         }
         .padding(.horizontal, 10).frame(height: 32)
-        .background(active ? Color(nsColor: .textBackgroundColor) : .clear)
+        // the active tab joins the editor below it, in the editor's background
+        .background(active ? Color(hex: theme.palette(dark: scheme == .dark).background) : .clear)
         .overlay(alignment: .top) { if active { Rectangle().fill(Color.accentColor).frame(height: 2) } }
         .contentShape(Rectangle())
         .onHover { hover = $0 }
@@ -172,6 +267,15 @@ struct DocumentView: View {
                 }
                 .pickerStyle(.segmented).frame(width: 130).labelsHidden()
             }
+            Menu {
+                EditorThemePicker().pickerStyle(.inline)
+            } label: {
+                Image(systemName: "paintpalette")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Theme")
             Button { EditorStore.shared.save(model.path) } label: { Image(systemName: "square.and.arrow.down") }
                 .help("Save (⌘S)").disabled(!model.doc.isDirty)
             Button { store.insertIntoTerminal("@\(model.path) ") } label: { Image(systemName: "at") }
@@ -260,18 +364,28 @@ private struct CompareSheet: View {
     }
 }
 
-/// Editable source text: NSTextView with line numbers, undo, find (⌘F), no smart quotes.
+/// Editable source text: NSTextView with line numbers, undo, find (⌘F), no smart quotes, in the editor theme.
 struct CodeEditor: NSViewRepresentable {
     @ObservedObject var model: DocumentModel
     let session: String
     @ObservedObject private var editors = EditorStore.shared
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
+    @Environment(\.colorScheme) private var scheme
 
     static let font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+
+    private var palette: EditorPalette { theme.palette(dark: scheme == .dark) }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var model: DocumentModel
         var focusSeen = 0
-        init(model: DocumentModel) { self.model = model }
+        var palette: EditorPalette?
+        let language: SyntaxTokens.Language?
+        private var coloring = false
+        init(model: DocumentModel, language: SyntaxTokens.Language?) {
+            self.model = model
+            self.language = language
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
@@ -279,11 +393,25 @@ struct CodeEditor: NSViewRepresentable {
             MainActor.assumeIsolated {
                 model.doc.text = text
                 EditorStore.shared.edited(model.path)
+                recolor(tv)
+            }
+        }
+
+        /// Once per run loop pass, however many edits came in (pasting, undo of many steps).
+        @MainActor func recolor(_ tv: NSTextView) {
+            guard !coloring, let palette else { return }
+            coloring = true
+            DispatchQueue.main.async { [weak self, weak tv] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.coloring = false
+                    if let tv { SyntaxColoring.apply(tv, palette: palette, language: self.language) }
+                }
             }
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
+    func makeCoordinator() -> Coordinator { Coordinator(model: model, language: SyntaxTokens.language(for: model.path)) }
 
     func makeNSView(context: Context) -> NSScrollView {
         // Apple's recipe for a text view in a scroll view, with our subclass that draws the line numbers
@@ -320,12 +448,11 @@ struct CodeEditor: NSViewRepresentable {
         tv.isGrammarCheckingEnabled = false
         tv.smartInsertDeleteEnabled = false
         tv.font = Self.font
-        tv.textColor = .textColor
-        tv.backgroundColor = .textBackgroundColor
-        tv.insertionPointColor = .textColor
-        tv.typingAttributes = [.font: Self.font, .foregroundColor: NSColor.textColor]
         tv.textContainerInset = NSSize(width: GutterTextView.gutter, height: 6)
-        Self.setText(tv, model.doc.text)
+        Self.style(tv, scroll: scroll, palette)
+        context.coordinator.palette = palette
+        Self.setText(tv, model.doc.text, palette)
+        SyntaxColoring.apply(tv, palette: palette, language: context.coordinator.language)
         tv.delegate = context.coordinator
         context.coordinator.focusSeen = editors.focusRequest
         return scroll
@@ -333,11 +460,22 @@ struct CodeEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let tv = scroll.documentView as? NSTextView else { return }
+        let palette = palette
+        // another theme, or the appearance changed under Automatic
+        if context.coordinator.palette != palette {
+            context.coordinator.palette = palette
+            Self.style(tv, scroll: scroll, palette)
+            tv.textStorage?.addAttribute(.foregroundColor, value: palette.ns(palette.foreground),
+                                         range: NSRange(location: 0, length: (tv.string as NSString).length))
+            SyntaxColoring.apply(tv, palette: palette, language: context.coordinator.language)
+            tv.needsDisplay = true
+        }
         // reloaded from disk (or reverted): take the new text, keep the selection and scroll position
         if tv.string != model.doc.text {
             let sel = tv.selectedRanges
             let origin = scroll.contentView.bounds.origin
-            Self.setText(tv, model.doc.text)
+            Self.setText(tv, model.doc.text, palette)
+            SyntaxColoring.apply(tv, palette: palette, language: context.coordinator.language)
             let length = (tv.string as NSString).length
             tv.selectedRanges = sel.map { r in
                 let range = r.rangeValue
@@ -359,11 +497,23 @@ struct CodeEditor: NSViewRepresentable {
         CGSize(width: proposal.width ?? 400, height: proposal.height ?? 400)
     }
 
+    /// Background, cursor, selection and line numbers in the theme's colors.
+    static func style(_ tv: NSTextView, scroll: NSScrollView, _ p: EditorPalette) {
+        tv.backgroundColor = p.ns(p.background)
+        scroll.backgroundColor = p.ns(p.background)
+        tv.insertionPointColor = p.ns(p.cursor)
+        tv.selectedTextAttributes = [.backgroundColor: p.ns(p.selection)]
+        tv.typingAttributes = [.font: font, .foregroundColor: p.ns(p.foreground)]
+        // the scrollers follow the theme, not the app (a dark theme in a light app)
+        scroll.appearance = NSAppearance(named: p.dark ? .darkAqua : .aqua)
+        (tv as? GutterTextView)?.gutterColor = p.ns(p.gutter)
+    }
+
     /// Replaces the text with explicit font and color. (`string =` gave loaded text no color: black on a dark
     /// background, until the first keystroke redrew it with the typing attributes.)
-    static func setText(_ tv: NSTextView, _ text: String) {
+    static func setText(_ tv: NSTextView, _ text: String, _ p: EditorPalette) {
         tv.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: [
-            .font: font, .foregroundColor: NSColor.textColor,
+            .font: font, .foregroundColor: p.ns(p.foreground),
         ]))
         tv.needsDisplay = true
     }
@@ -373,10 +523,12 @@ struct CodeEditor: NSViewRepresentable {
 /// scroll view overlapped the views above it and the text didn't draw.)
 final class GutterTextView: NSTextView {
     static let gutter: CGFloat = 44
-    private static let attrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
-        .foregroundColor: NSColor.tertiaryLabelColor,
-    ]
+    var gutterColor: NSColor = .tertiaryLabelColor {
+        didSet { needsDisplay = true }
+    }
+    private var attrs: [NSAttributedString.Key: Any] {
+        [.font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular), .foregroundColor: gutterColor]
+    }
 
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
@@ -385,9 +537,9 @@ final class GutterTextView: NSTextView {
         let origin = textContainerOrigin
         func draw(_ n: Int, _ frag: NSRect) {
             let label = "\(n)" as NSString
-            let size = label.size(withAttributes: Self.attrs)
+            let size = label.size(withAttributes: attrs)
             label.draw(at: NSPoint(x: Self.gutter - size.width - 10, y: origin.y + frag.minY + (frag.height - size.height) / 2),
-                       withAttributes: Self.attrs)
+                       withAttributes: attrs)
         }
         guard text.length > 0 else {
             draw(1, lm.extraLineFragmentRect.height > 0 ? lm.extraLineFragmentRect : NSRect(x: 0, y: 0, width: 0, height: 15))

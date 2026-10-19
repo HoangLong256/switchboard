@@ -8,17 +8,30 @@ struct TmuxTerminal: NSViewRepresentable {
     let name: String
     let focusRequest: Int
     @Environment(\.colorScheme) private var scheme
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
 
-    final class Coordinator { var focusSeen = 0 }
+    final class Coordinator {
+        var focusSeen = 0
+        var palette: EditorPalette?
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    private func applyColors(_ view: SessionTerminalView) {
-        let dark = scheme == .dark
-        view.nativeBackgroundColor = NSColor(white: dark ? 0.08 : 1, alpha: 1)
-        view.nativeForegroundColor = NSColor(white: dark ? 0.96 : 0.04, alpha: 1)
-        view.caretColor = view.nativeForegroundColor
-        view.selectedTextBackgroundColor = .selectedTextBackgroundColor
+    /// The theme's background, text, cursor, selection and 16 ANSI colors (VS Code's `terminal.*`).
+    private func applyColors(_ view: SessionTerminalView, _ coordinator: Coordinator) {
+        let p = theme.palette(dark: scheme == .dark)
+        guard coordinator.palette != p else { return }
+        coordinator.palette = p
+        view.nativeBackgroundColor = p.ns(p.background)
+        view.nativeForegroundColor = p.ns(p.foreground)
+        view.caretColor = p.ns(p.cursor)
+        view.selectedTextBackgroundColor = p.ns(p.selection)
+        if p.ansi.count == 16 {
+            view.installColors(p.ansi.map {
+                SwiftTerm.Color(red8: UInt16(($0 >> 16) & 0xFF), green8: UInt16(($0 >> 8) & 0xFF), blue8: UInt16($0 & 0xFF))
+            })
+        }
+        view.needsDisplay = true
     }
 
     func makeNSView(context: Context) -> SessionTerminalView {
@@ -26,7 +39,7 @@ struct TmuxTerminal: NSViewRepresentable {
         view.font = NSFont(name: "MesloLGS-NF-Regular", size: 13) ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
         view.optionAsMetaKey = false
         view.getTerminal().setCursorStyle(.steadyBar)
-        applyColors(view)
+        applyColors(view, context.coordinator)
         hideScroller(view)
         view.startProcess(executable: Tmux.path!, args: Tmux.attachArgs(name),
                           environment: Tmux.environmentList(), execName: "tmux")
@@ -36,7 +49,7 @@ struct TmuxTerminal: NSViewRepresentable {
     }
 
     func updateNSView(_ view: SessionTerminalView, context: Context) {
-        applyColors(view)
+        applyColors(view, context.coordinator)
         hideScroller(view)
         if context.coordinator.focusSeen != focusRequest {
             context.coordinator.focusSeen = focusRequest

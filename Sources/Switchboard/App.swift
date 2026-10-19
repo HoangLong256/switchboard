@@ -37,6 +37,15 @@ struct SwitchboardApp: App {
                     }
                 }
                 .keyboardShortcut("w")
+                // VS Code: ⌥⌘T closes the other editors; ⌥⌘W is macOS's "close all"
+                Button("Close Other Editors") {
+                    if let p = activeFile, let s = store.selected { EditorStore.shared.closeOthers(p, in: s) }
+                }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+                .disabled(store.tab != .editor || EditorStore.shared.tabs(of: store.selected).paths.count < 2)
+                Button("Close All Editors") { if let s = store.selected { EditorStore.shared.closeAll(in: s) } }
+                    .keyboardShortcut("w", modifiers: [.command, .option])
+                    .disabled(store.tab != .editor || activeFile == nil)
             }
             TextEditingCommands()
             CommandGroup(after: .sidebar) {
@@ -45,6 +54,12 @@ struct SwitchboardApp: App {
                     Text("System").tag(Appearance.system).keyboardShortcut("0", modifiers: [.command, .option])
                     Text("Light").tag(Appearance.light).keyboardShortcut("l", modifiers: [.command, .option])
                     Text("Dark").tag(Appearance.dark).keyboardShortcut("d", modifiers: [.command, .option])
+                }
+                EditorThemePicker()
+                Picker("File Icon Theme", selection: Binding(
+                    get: { IconTheme(rawValue: UserDefaults.standard.string(forKey: "iconTheme") ?? "") ?? .seti },
+                    set: { UserDefaults.standard.set($0.rawValue, forKey: "iconTheme") })) {
+                    ForEach(IconTheme.allCases) { Text($0.title).tag($0) }
                 }
                 Divider()
             }
@@ -161,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct ContentView: View {
     @EnvironmentObject private var store: Store
     @State private var columns = NavigationSplitViewVisibility.all
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
@@ -172,6 +188,8 @@ struct ContentView: View {
         } detail: {
             DetailView()
         }
+        .tint(theme.themesApp ? Color(hex: theme.palette(dark: true).accent) : nil)
+        .onChange(of: theme) { AppSettings.shared.applyAppearance() }
         .navigationTitle("Switchboard")
         // the session's name is in the header; the toolbar stays clean
         .hidingToolbarTitle()
@@ -190,6 +208,9 @@ struct NewSessionSheet: View {
     @State private var name = ""
     @State private var folder = UserDefaults.standard.string(forKey: "lastFolder") ?? NSHomeDirectory()
     @AppStorage("newSessionAgentTeam") private var agentTeam = false
+    @AppStorage("newSessionStartClaude") private var startClaude = true
+    /// the name last filled in from the folder; replaced when the folder changes, unless you typed your own
+    @State private var suggested = ""
 
     private var valid: Bool { Notes.validName(name) && !name.hasPrefix(".") && !store.rows.contains { $0.name == name } }
 
@@ -206,26 +227,37 @@ struct NewSessionSheet: View {
                 Text("Agent team (experimental)")
                 Text("Sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for this session only, so Claude can split work across teammates. They show up under the session and in its Team tab.")
             }
-            Text("Opens a shell in Switchboard's tmux server with `claude -n \(name.isEmpty ? "<name>" : name)` typed in; press Enter in the terminal to start it.")
-                .font(.caption).foregroundStyle(.secondary)
+            Toggle(isOn: $startClaude) {
+                Text("Start Claude right away")
+                Text("Opens a shell in Switchboard's tmux server and runs `claude -n \(name.isEmpty ? "<name>" : name)` in it. Off: the command is only typed in, so you can change it before pressing Enter.")
+            }
             if !name.isEmpty && !valid {
                 Text("Use letters, digits and . _ # - (unique, no “..”).").font(.caption).foregroundStyle(Palette.need)
             }
         }
         .formStyle(.grouped)
         .frame(width: 460)
+        .onAppear { suggestName() }
+        .onChange(of: folder) { suggestName() }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Create") {
                     UserDefaults.standard.set(folder, forKey: "lastFolder")
-                    let (n, f, team) = (name, folder, agentTeam)
+                    let (n, f, team, start) = (name, folder, agentTeam, startClaude)
                     dismiss()
-                    Task { await store.startSession(name: n, folder: f, agentTeam: team) }
+                    Task { await store.startSession(name: n, folder: f, agentTeam: team, start: start) }
                 }
                 .disabled(!valid)
             }
         }
+    }
+
+    /// The folder's name as the session name, while the field is empty or still holds the last suggestion.
+    private func suggestName() {
+        guard name.isEmpty || name == suggested else { return }
+        suggested = Notes.suggestedName(folder: folder, taken: Set(store.rows.map(\.name)))
+        name = suggested
     }
 
     private func choose() {

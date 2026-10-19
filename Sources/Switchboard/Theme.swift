@@ -2,20 +2,29 @@ import AppKit
 import SessionCore
 import SwiftUI
 
-/// Status and git colors.
+/// Status and git colors. With a theme other than Automatic they come from its terminal colors (red, green,
+/// yellow, blue, magenta, cyan), so they sit well on its background.
 enum Palette {
-    static let need = Color(hex: 0xE5341F)
-    static let block = Color(hex: 0xF08C00)
-    static let busy = Color(hex: 0x12A150)
-    static let wait = Color(hex: 0x8B5CF6)
-    static let shell = Color(hex: 0x2F6FED)
-    static let idle = Color(nsColor: .tertiaryLabelColor)
-    static let off = Color(nsColor: .quaternaryLabelColor)
+    static var need: Color { ansi(1, 0xE5341F) }
+    static var block: Color { ansi(3, 0xF08C00) }
+    static var busy: Color { ansi(2, 0x12A150) }
+    static var wait: Color { ansi(5, 0x8B5CF6) }
+    /// ready for your next message
+    static var idle: Color { ansi(4, 0x2F6FED) }
+    static var shell: Color { ansi(6, 0x0891B2) }
+    static let off = Color(nsColor: .tertiaryLabelColor)
 
     /// git status in the folder sidebar
-    static let modified = Color(hex: 0xD97706)
-    static let added = Color(hex: 0x12A150)
-    static let deleted = Color(hex: 0xE5341F)
+    static var modified: Color { ansi(3, 0xD97706) }
+    static var added: Color { ansi(2, 0x12A150) }
+    static var deleted: Color { ansi(1, 0xE5341F) }
+
+    private static func ansi(_ index: Int, _ fallback: UInt32) -> Color {
+        let theme = EditorTheme.current
+        guard theme.themesApp else { return Color(hex: fallback) }
+        let ansi = theme.palette(dark: true).ansi
+        return Color(hex: ansi.indices.contains(index) ? ansi[index] : fallback)
+    }
 }
 
 extension Color {

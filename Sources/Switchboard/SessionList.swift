@@ -9,6 +9,9 @@ struct SessionList: View {
     @ObservedObject private var teams = TeamStore.shared
     @State private var search = ""
     @State private var confirmClose: Row?
+    @AppStorage("sessionsGrouping") private var grouping: SessionGrouping = .none
+    /// "<grouping>/<group>" of the sections folded away, one per line
+    @AppStorage("collapsedGroups") private var collapsedGroups = ""
 
     var body: some View {
         let (fav, rest) = sections
@@ -19,9 +22,21 @@ struct SessionList: View {
             if !fav.isEmpty {
                 Section("Favorites") { rows(fav) }
             }
-            Section(fav.isEmpty ? "Sessions" : "Other") { rows(rest) }
+            if grouping == .none {
+                Section(fav.isEmpty ? "Sessions" : "Other") { rows(rest) }
+            } else {
+                ForEach(SessionGroups.split(rest, key: groupKey), id: \.key) { g in
+                    Section(isExpanded: expanded(g.key)) {
+                        rows(g.items)
+                    } header: {
+                        GroupHeader(title: grouping == .folder ? (g.key as NSString).lastPathComponent : g.key,
+                                    path: grouping == .folder ? g.key : nil, items: g.items)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
+        .themeBackground(sidebar: true)
         .safeAreaInset(edge: .bottom, spacing: 0) { UsageFooter() }
         .searchable(text: $search, placement: .sidebar, prompt: "Search sessions")
         .overlay {
@@ -31,6 +46,17 @@ struct SessionList: View {
             }
         }
         .toolbar {
+            ToolbarItem {
+                Menu {
+                    Picker("Group By", selection: $grouping) {
+                        ForEach(SessionGrouping.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Group By", systemImage: "rectangle.3.group")
+                }
+                .help("Group sessions by parent folder or status")
+            }
             ToolbarItem {
                 Button { store.newSessionOpen = true } label: { Label("New Session", systemImage: "plus") }
                     .help("New Session (⌘N)")
@@ -57,6 +83,28 @@ struct SessionList: View {
         let split = Favorites.split(filtered, favorites: store.favorites, name: \.name)
         return Favorites.withWorkers(favorites: split.favorites, rest: split.rest, session: \.session,
                                      active: { $0.status.rank < 3 })
+    }
+
+    /// The section a session belongs to: the folder its working folder sits in ("~/Workplace/Personal Projects"),
+    /// or its status.
+    private func groupKey(_ r: Row) -> String {
+        switch grouping {
+        case .status: return r.status.label.prefix(1).uppercased() + r.status.label.dropFirst()
+        case .folder, .none:
+            guard let f = store.folder(of: r) else { return "No folder" }
+            return abbreviated((f as NSString).deletingLastPathComponent)
+        }
+    }
+
+    private func expanded(_ group: String) -> Binding<Bool> {
+        let id = "\(grouping.rawValue)/\(group)"
+        return Binding(
+            get: { !collapsedGroups.split(separator: "\n").contains { $0 == id } },
+            set: { open in
+                var ids = collapsedGroups.split(separator: "\n").map(String.init).filter { $0 != id }
+                if !open { ids.append(id) }
+                collapsedGroups = ids.joined(separator: "\n")
+            })
     }
 
     @ViewBuilder
@@ -113,6 +161,52 @@ struct SessionList: View {
     }
 }
 
+/// How the sessions column is sectioned below the favorites.
+enum SessionGrouping: String, CaseIterable, Identifiable {
+    case none, folder, status
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .none: "None"
+        case .folder: "Parent Folder"
+        case .status: "Status"
+        }
+    }
+}
+
+/// "Personal Projects  ● 1  3": a group's name, how many of its sessions need you, and its size.
+private struct GroupHeader: View {
+    let title: String
+    /// the full folder, when grouped by parent folder
+    let path: String?
+    let items: [Row]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title).lineLimit(1)
+            Spacer(minLength: 4)
+            let need = items.filter { $0.status.rank == 0 }.count
+            if need > 0 {
+                Label("\(need)", systemImage: "circle.fill").foregroundStyle(Palette.need).labelStyle(DotCount())
+            }
+            Text("\(items.count)").foregroundStyle(.tertiary).monospacedDigit()
+        }
+        .help((path.map { "\($0)\n" } ?? "") + summary(items))
+    }
+
+    private func summary(_ items: [Row]) -> String {
+        let n = items.filter { $0.status.rank == 0 }.count
+        return "\(items.count) session\(items.count == 1 ? "" : "s")" + (n > 0 ? ", \(n) need\(n == 1 ? "s" : "") you" : "")
+    }
+}
+
+/// A small dot before the number.
+private struct DotCount: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 3) { configuration.icon.font(.system(size: 6)); configuration.title.monospacedDigit() }
+    }
+}
+
 struct SessionRowView: View {
     @ObservedObject private var resume = AutoContinue.shared
     let row: Row
@@ -160,13 +254,27 @@ struct SessionRowView: View {
     }
 }
 
+/// Filled in the status color; a ring when offline; breathing while the session works.
 struct StatusDot: View {
+    /// the colors follow the theme
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     let status: Status
+    @State private var dim = false
 
     var body: some View {
-        Circle()
-            .fill(status.color)
-            .frame(width: 7, height: 7)
-            .help(status.why ?? status.label)
+        Group {
+            if status.core.cls == "off" {
+                Circle().strokeBorder(status.color, lineWidth: 1.2)
+            } else {
+                Circle().fill(status.color)
+                    .opacity(status.active && dim ? 0.35 : 1)
+                    .animation(status.active ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
+                               value: dim)
+            }
+        }
+        .frame(width: 7, height: 7)
+        .onAppear { dim = status.active }
+        .onChange(of: status.active) { _, on in dim = on }
+        .help(status.why ?? status.label)
     }
 }

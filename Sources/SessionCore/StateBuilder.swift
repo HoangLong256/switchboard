@@ -56,6 +56,8 @@ public struct Session: Codable, Equatable, Identifiable, Sendable {
     public var tmuxSession: String? = nil
     /// the conversation stopped at a usage limit (newest transcript message)
     public var limitHit: LimitHit? = nil
+    /// model of the last response in the transcript (the status line's model and effort are fresher when set up)
+    public var model: String? = nil
 
     /// Unique even when a dead registry entry and a live session share the same name
     /// (the registry only renames live duplicates). Keep using `name` for selection in the app.
@@ -175,6 +177,7 @@ public enum StateBuilder {
             ))
             sessions[sessions.count - 1].tmuxSession = e.tmuxSession
             sessions[sessions.count - 1].limitHit = e.alive ? tail.limitHit : nil
+            sessions[sessions.count - 1].model = tail.model
             seen.insert(e.name)
         }
 

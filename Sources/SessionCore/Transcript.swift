@@ -50,6 +50,8 @@ public struct Tail: Equatable, Sendable {
     public var lastSentence: String? = nil
     /// the conversation ended at a usage limit: the newest message is Claude Code's limit error
     public var limitHit: LimitHit? = nil
+    /// model of the newest real assistant response ("claude-opus-5-5"); not Claude Code's "<synthetic>" messages
+    public var model: String? = nil
 }
 
 /// Claude Code's own message when a usage limit stops a turn, e.g. "You've hit your session limit · resets
@@ -148,6 +150,10 @@ public enum Transcript {
                     tail.limitHit = LimitHit(text: textOf(content), at: at)
                 }
             }
+            if tail.model == nil, type == "assistant",
+               let m = (obj["message"] as? [String: Any])?["model"] as? String, !m.isEmpty, !m.hasPrefix("<") {
+                tail.model = m
+            }
             if tail.lastAssistant == nil && type == "assistant" {
                 let t = textOf(content)
                 if !t.isEmpty { tail.lastAssistant = Said(text: t, at: at) }
@@ -155,7 +161,8 @@ public enum Transcript {
                 let t = textOf(content)
                 if !t.isEmpty && !t.hasPrefix("<") { tail.lastUser = Said(text: t, at: at) }
             }
-            if tail.lastAssistant != nil && tail.lastUser != nil && tail.branch != nil && tail.lastAction != nil { break }
+            if tail.lastAssistant != nil && tail.lastUser != nil && tail.branch != nil && tail.lastAction != nil
+                && tail.model != nil { break }
         }
         tail.lastSentence = tail.lastAssistant.flatMap { lastSentence(of: $0.text) }
         return tail

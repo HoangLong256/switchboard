@@ -19,6 +19,22 @@ public enum Notes {
             && name.unicodeScalars.allSatisfy { ($0.isASCII && CharacterSet.alphanumerics.contains($0)) || "._#-".unicodeScalars.contains($0) }
     }
 
+    /// A valid, unused session name from a folder: "Personal Projects" → "personal-projects", then
+    /// "personal-projects-2" if that is taken. Empty when the folder name has no usable characters.
+    public static func suggestedName(folder: String, taken: Set<String>) -> String {
+        var base = ""
+        for ch in (folder as NSString).lastPathComponent.lowercased().folding(options: .diacriticInsensitive, locale: nil) {
+            if ch.isASCII, ch.isLetter || ch.isNumber || "._#-".contains(ch) { base.append(ch) }
+            else if !base.hasSuffix("-") { base.append("-") }
+        }
+        while base.contains("..") { base = base.replacingOccurrences(of: "..", with: ".") }
+        base = base.trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        guard validName(base) else { return "" }
+        var name = base, n = 2
+        while taken.contains(name) { name = "\(base)-\(n)"; n += 1 }
+        return name
+    }
+
     private static func path(_ root: String, _ session: String) -> String { "\(root)/\(session).md" }
 
     /// The session's notes, "" if there are none.

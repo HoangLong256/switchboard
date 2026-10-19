@@ -67,7 +67,9 @@ enum Tmux {
     /// `agentTeam` turns on Claude Code's experimental agent teams for this session only (env var); teammates in
     /// split-pane mode then open as panes of this tmux session.
     /// `environment`: more variables for the session (e.g. Claude Code's unattended retry mode).
-    static func newSession(name: String, dir: String, agentTeam: Bool = false, environment: [String: String] = [:]) -> String? {
+    /// `start`: press Enter after typing `claude -n <name>`, so Claude Code starts right away.
+    static func newSession(name: String, dir: String, agentTeam: Bool = false, environment: [String: String] = [:],
+                           start: Bool = true) -> String? {
         scrubServer()
         var args = ["new-session", "-d", "-s", name, "-c", dir, "-e", "SWITCHBOARD_SESSION=\(name)"]
         if agentTeam { args += ["-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"] }
@@ -75,7 +77,8 @@ enum Tmux {
         let r = run(args)
         guard r.status == 0 else { return r.output.isEmpty ? "tmux error \(r.status)" : r.output }
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
-            _ = run(SessionControl.typeArgs(SessionControl.claudeCommand(name), into: name)[0])
+            let cmds = SessionControl.typeArgs(SessionControl.claudeCommand(name), into: name)
+            for c in start ? cmds : [cmds[0]] { _ = run(c) }
         }
         return nil
     }

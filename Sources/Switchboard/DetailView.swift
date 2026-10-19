@@ -1,6 +1,7 @@
 import AppKit
 import FolderKit
 import SessionCore
+import StatusLineKit
 import MarkdownUI
 import SwiftUI
 
@@ -9,6 +10,7 @@ struct DetailView: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var editors = EditorStore.shared
     @ObservedObject private var teams = TeamStore.shared
+    @AppStorage("showModelInTabs") private var showModel = true
 
     var body: some View {
         if let row = store.selectedRow {
@@ -22,6 +24,7 @@ struct DetailView: View {
                     .labelsHidden()
                     .fixedSize()
                     Spacer()
+                    if showModel { ModelChip(row: row) }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 10)
                 Divider()
@@ -29,6 +32,7 @@ struct DetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
             }
+            .themeBackground()
         } else {
             WelcomeView()
         }
@@ -68,6 +72,77 @@ struct DetailView: View {
         case .handover: HandoverTab(name: row.name).id(row.name)
         case .notes: NotesTab(name: row.name).id(row.name)
         case .info: InfoTab(row: row)
+        }
+    }
+}
+
+/// "Opus 5.5 · high" next to the tabs: the model and effort the session runs with, details on click.
+struct ModelChip: View {
+    @EnvironmentObject private var usage: UsageStore
+    @EnvironmentObject private var store: Store
+    let row: Row
+    @State private var open = false
+
+    var body: some View {
+        let line = usage.line(row.session)
+        let model = line?.model ?? row.session.model.map(ModelName.short)
+        let effort = line?.effort
+        Button { open.toggle() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "cpu").foregroundStyle(.secondary)
+                Text(model ?? "Model unknown").foregroundStyle(model == nil ? .secondary : .primary)
+                if let effort {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(effort.capitalized).foregroundStyle(effortColor(effort))
+                }
+            }
+            .font(.callout)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(.quaternary.opacity(0.6), in: Capsule())
+            .opacity(row.session.alive ? 1 : 0.6)
+        }
+        .buttonStyle(.plain)
+        .help(effort.map { "Model and effort: \(model ?? "unknown") · \($0)" } ?? "Model: \(model ?? "unknown")")
+        .popover(isPresented: $open, arrowEdge: .bottom) { details(line: line, model: model, effort: effort) }
+    }
+
+    private func details(line: SessionLine?, model: String?, effort: String?) -> some View {
+        Form {
+            LabeledContent("Model", value: model ?? "–")
+            if let id = row.session.model, id != model { LabeledContent("Model ID", value: id) }
+            LabeledContent("Effort", value: effort?.capitalized ?? "–")
+            if let t = line?.contextTokens, let w = line?.contextWindow {
+                LabeledContent("Context", value: "\(UsageFormat.tokens(t)) of \(UsageFormat.tokens(w))")
+            }
+            if let c = line?.costUSD { LabeledContent("Cost", value: UsageFormat.usd(c)) }
+            if let line {
+                Text("From the status line, \(ago(ISO8601DateFormatter().string(from: line.writtenAt), now: store.now)).")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(model == nil
+                     ? "No response from this session yet. Model and effort come from Claude Code's status line: set it up from the usage bars at the bottom of the sessions column."
+                     : "Model of the last response in the transcript. Effort comes from Claude Code's status line: set it up from the usage bars at the bottom of the sessions column.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Change them in the terminal with /model and /effort.").font(.caption).foregroundStyle(.secondary)
+        }
+        .formStyle(.grouped)
+        .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// low → max from calm to strong
+    private func effortColor(_ e: String) -> Color {
+        switch e.lowercased() {
+        case "low": .secondary
+        case "medium": .primary
+        case "high": Palette.shell
+        case "xhigh": Palette.wait
+        case "max": Palette.need
+        default: .primary
         }
     }
 }
@@ -130,6 +205,8 @@ struct WelcomeView: View {
 
 struct TerminalTab: View {
     @EnvironmentObject private var store: Store
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
+    @Environment(\.colorScheme) private var scheme
     let row: Row
 
     var body: some View {
@@ -139,7 +216,7 @@ struct TerminalTab: View {
             TmuxTerminal(name: t, focusRequest: store.focusRequest)
                 .id("\(t)#\(store.terminalEpoch)")
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Color(nsColor: .textBackgroundColor))
+                .background(Color(hex: theme.palette(dark: scheme == .dark).background))
         } else if row.session.alive {
             ContentUnavailableView("Runs outside Switchboard", systemImage: "macwindow",
                                    description: Text("This session has no tmux session on `-L \(Tmux.socket)`, so its terminal can't be shown here. Its files, handover and notes still work."))
@@ -281,6 +358,7 @@ struct InfoTab: View {
             }
         }
         .formStyle(.grouped)
+        .themeBackground()
     }
 }
 

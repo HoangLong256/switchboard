@@ -131,3 +131,65 @@ final class TextDocumentTests: XCTestCase {
         XCTAssertEqual(TextDocument.open(dir.appendingPathComponent("nope").path).load, .missing)
     }
 }
+
+final class CloseTabsTests: XCTestCase {
+    private func tabs(_ paths: [String]) -> EditorTabs {
+        var t = EditorTabs()
+        for p in paths { t.open(p, pinned: true) }
+        return t
+    }
+
+    func testOthersAreAllButTheGivenTab() {
+        let t = tabs(["/a", "/b", "/c"])
+        XCTAssertEqual(t.others(than: "/b"), ["/a", "/c"])
+        XCTAssertEqual(tabs(["/a"]).others(than: "/a"), [])
+    }
+
+    func testRightOfIsEverythingAfterTheTab() {
+        let t = tabs(["/a", "/b", "/c"])
+        XCTAssertEqual(t.right(of: "/a"), ["/b", "/c"])
+        XCTAssertEqual(t.right(of: "/c"), [])
+        XCTAssertEqual(t.right(of: "/x"), [])
+    }
+}
+
+final class SyntaxTokensTests: XCTestCase {
+    private func kinds(_ text: String, _ lang: SyntaxTokens.Language) -> [(SyntaxTokens.Kind, String)] {
+        let ns = text as NSString
+        return SyntaxTokens.tokens(text, language: lang).map { ($0.kind, ns.substring(with: NSRange(location: $0.location, length: $0.length))) }
+    }
+
+    func testSwiftLine() {
+        let t = kinds(#"let x = foo(42) // hi "there""#, SyntaxTokens.language(for: "a.swift")!)
+        XCTAssertEqual(t.map(\.1), ["let", "foo", "42", #"// hi "there""#])
+        XCTAssertEqual(t.map(\.0), [.keyword, .function, .number, .comment])
+    }
+
+    func testStringsWithEscapesAndBlockComments() {
+        let t = kinds(#"/* a "b" */ s = "q\"x" + Type"#, SyntaxTokens.cLike)
+        XCTAssertEqual(t.map(\.1), [#"/* a "b" */"#, #""q\"x""#, "Type"])
+        XCTAssertEqual(t.map(\.0), [.comment, .string, .type])
+    }
+
+    func testHashCommentsNotInsideWords() {
+        let t = kinds("def f(): # note\nurl = a#b", SyntaxTokens.language(for: "x.py")!)
+        XCTAssertEqual(t.map(\.1), ["def", "f", "# note"])
+    }
+
+    func testNumbersNotInsideIdentifiersAndUTF16Offsets() {
+        let text = "é x1 = 3.5"
+        let t = SyntaxTokens.tokens(text, language: SyntaxTokens.cLike)
+        XCTAssertEqual(t.count, 1)
+        XCTAssertEqual((text as NSString).substring(with: NSRange(location: t[0].location, length: t[0].length)), "3.5")
+    }
+
+    func testUnterminatedStringStopsAtLineEnd() {
+        let t = kinds("\"open\nlet", SyntaxTokens.language(for: "a.swift")!)
+        XCTAssertEqual(t.map(\.1), ["\"open", "let"])
+    }
+
+    func testPlainTextHasNoLanguage() {
+        XCTAssertNil(SyntaxTokens.language(for: "notes.txt"))
+        XCTAssertNotNil(SyntaxTokens.language(for: "/x/Makefile"))
+    }
+}

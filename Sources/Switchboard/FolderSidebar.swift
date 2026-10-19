@@ -16,13 +16,21 @@ struct FolderSidebar: View {
     @State private var lookingUp = false
     /// worktree picked per session instead of its own folder
     @State private var worktreeOf: [String: String] = [:]
+    @AppStorage("sidebarMode") private var mode: SidebarMode = .explorer
+
+    enum SidebarMode: String { case explorer, sourceControl }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            content
+            if mode == .sourceControl && model.root != nil {
+                SourceControlView(model: model)
+            } else {
+                content
+            }
         }
+        .themeBackground(sidebar: true)
         .frame(minWidth: 220)
         // re-run when the selection or its folder changes (the folder may only be known after the first refresh)
         .task(id: "\(store.selected ?? "")|\(store.selectedRow.flatMap(store.folder) ?? "")") { await follow() }
@@ -38,6 +46,18 @@ struct FolderSidebar: View {
         }
     }
 
+    /// Explorer | Source Control, like VS Code's activity bar; Source Control shows how many files changed.
+    private var modePicker: some View {
+        let count = model.git.files.count
+        return Picker("", selection: $mode) {
+            Label("Explorer", systemImage: "doc.on.doc").tag(SidebarMode.explorer)
+            Label(count > 0 ? "Changes \(count)" : "Changes", systemImage: "arrow.triangle.branch").tag(SidebarMode.sourceControl)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .help("Explorer or Source Control")
+    }
+
     private func follow() async {
         guard let row = store.selectedRow else { model.show(nil); return }
         if let w = worktreeOf[row.name] { model.show(w); return }
@@ -50,6 +70,7 @@ struct FolderSidebar: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let root = model.root {
+                modePicker
                 HStack(alignment: .firstTextBaseline) {
                     Text((root as NSString).lastPathComponent).font(.headline).lineLimit(1)
                     Spacer()
@@ -58,8 +79,10 @@ struct FolderSidebar: View {
                     }
                 }
                 if !model.worktrees.isEmpty { worktreePicker(root) }
-                TextField("Filter", text: $model.filter)
-                    .textFieldStyle(.roundedBorder).controlSize(.small)
+                if mode == .explorer {
+                    TextField("Filter", text: $model.filter)
+                        .textFieldStyle(.roundedBorder).controlSize(.small)
+                }
             } else {
                 Text("Folder").font(.headline)
             }
@@ -88,6 +111,7 @@ struct FolderSidebar: View {
                         .itemProvider { NSItemProvider(object: URL(fileURLWithPath: row.entry.path) as NSURL) }
                 }
                 .listStyle(.inset)
+                .themeBackground(sidebar: true)
                 .contextMenu(forSelectionType: String.self) { paths in
                     if let p = paths.first, let e = entry(p) { menu(e) }
                 } primaryAction: { paths in
@@ -215,11 +239,12 @@ struct FolderRowView: View {
                 }
             }
             .frame(width: 12)
-            Image(systemName: icon).foregroundStyle(row.entry.isDir ? Color.accentColor : .secondary)
-                .frame(width: 16)
+            FileIconView(name: row.entry.name, isDir: row.entry.isDir, expanded: row.expanded)
             Text(row.entry.name).lineLimit(1).truncationMode(.middle)
                 .fontWeight(open ? .semibold : .regular)
-                .foregroundStyle(change == .deleted ? .secondary : .primary)
+                // names take their git color, like VS Code's Explorer (folders with changes inside too)
+                .foregroundStyle(change == .deleted ? AnyShapeStyle(.secondary)
+                                 : change.map { AnyShapeStyle(color($0).opacity(row.entry.isDir ? 0.85 : 1)) } ?? AnyShapeStyle(.primary))
                 .strikethrough(change == .deleted)
             Spacer(minLength: 4)
             if let change, !row.entry.isDir {
@@ -237,20 +262,6 @@ struct FolderRowView: View {
         case .added, .untracked: Palette.added
         case .deleted, .conflicted: Palette.deleted
         case .modified, .renamed: Palette.modified
-        }
-    }
-
-    private var icon: String {
-        if row.entry.isDir { return row.expanded ? "folder.fill" : "folder" }
-        switch (row.entry.name as NSString).pathExtension.lowercased() {
-        case "swift", "js", "ts", "tsx", "jsx", "py", "go", "rs", "rb", "java", "kt", "c", "h", "m", "cpp", "cs", "sh":
-            return "chevron.left.forwardslash.chevron.right"
-        case "md", "markdown", "txt": return "doc.text"
-        case "json", "yaml", "yml", "toml", "plist", "xml": return "curlybraces"
-        case "png", "jpg", "jpeg", "gif", "heic", "webp", "svg", "icns": return "photo"
-        case "pdf": return "doc.richtext"
-        case "zip", "gz", "tar": return "doc.zipper"
-        default: return "doc"
         }
     }
 }

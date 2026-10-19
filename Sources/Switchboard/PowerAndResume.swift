@@ -55,7 +55,10 @@ final class AppSettings: ObservableObject {
 
     /// Sets it for the whole app: every window, the terminal and the editor follow.
     func applyAppearance() {
-        NSApp.appearance = appearance.nsAppearance
+        // a theme other than Automatic is light or dark by itself (Dracula is always dark)
+        let theme = EditorTheme.current
+        NSApp.appearance = theme.themesApp ? NSAppearance(named: theme.palette(dark: true).dark ? .darkAqua : .aqua)
+            : appearance.nsAppearance
         // the Auto icon follows (also when macOS itself switches, see AppDelegate)
         DispatchQueue.main.async { NSApp.applicationIconImage = AppIcon.image(size: 512) }
     }

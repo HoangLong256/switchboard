@@ -6,6 +6,11 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var awake = KeepAwake.shared
     @ObservedObject private var resume = AutoContinue.shared
+    @AppStorage("editorTheme") private var editorTheme: EditorTheme = .automatic
+    @AppStorage("sessionsGrouping") private var grouping: SessionGrouping = .none
+    @AppStorage("showModelInTabs") private var showModel = true
+    @AppStorage("iconTheme") private var iconTheme: IconTheme = .seti
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Form {
@@ -14,6 +19,8 @@ struct SettingsView: View {
                     ForEach(Appearance.allCases) { a in Label(a.title, systemImage: a.symbol).tag(a) }
                 }
                 .pickerStyle(.segmented)
+                .disabled(editorTheme.themesApp)
+                .help(editorTheme.themesApp ? "Set by the theme \(editorTheme.title)" : "")
                 LabeledContent("App Icon") {
                     HStack(spacing: 10) {
                         ForEach(IconStyle.allCases) { s in
@@ -34,6 +41,35 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+            }
+
+            Section("Sessions") {
+                Picker("Group by", selection: $grouping) {
+                    ForEach(SessionGrouping.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Toggle("Show model and effort next to the session's tabs", isOn: $showModel)
+            }
+
+            Section {
+                LabeledContent("Theme") {
+                    HStack(spacing: 10) {
+                        ThemeSwatches(palette: editorTheme.palette(dark: scheme == .dark))
+                        Picker("Theme", selection: $editorTheme) {
+                            ForEach(EditorTheme.allCases) { Text($0.title).tag($0) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+                Picker("File Icons", selection: $iconTheme) {
+                    ForEach(IconTheme.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Theme")
+            } footer: {
+                Text("Colors the app, the editor and the terminal like the VS Code theme of the same name. A theme is light or dark by itself, so it takes over from Appearance. Automatic keeps the macOS look, with Light Modern or Dark Modern in the editor and terminal.")
             }
 
             Section {
@@ -90,6 +126,7 @@ struct SettingsView: View {
 /// Two quick switches at the bottom of the sessions column: keep awake and auto-continue, with what they do now.
 struct PowerToggles: View {
     @ObservedObject private var settings = AppSettings.shared
+    @AppStorage("editorTheme") private var theme: EditorTheme = .automatic
     @ObservedObject private var awake = KeepAwake.shared
     @ObservedObject private var resume = AutoContinue.shared
 
@@ -108,7 +145,9 @@ struct PowerToggles: View {
                 settings.appearance = all[(all.firstIndex(of: settings.appearance)! + 1) % all.count]
             } label: { Image(systemName: settings.appearance.symbol) }
             .buttonStyle(.borderless)
-            .help("Appearance: \(settings.appearance.title) – click for \(next.title)")
+            .disabled(theme.themesApp)
+            .help(theme.themesApp ? "Appearance is set by the theme \(theme.title)"
+                  : "Appearance: \(settings.appearance.title) – click for \(next.title)")
             SettingsLink { Image(systemName: "gearshape") }.buttonStyle(.borderless).help("Settings (⌘,)")
         }
         .font(.caption)
