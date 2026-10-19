@@ -10,7 +10,8 @@ struct Row: Identifiable, Equatable {
     let tmux: String?
     /// current folder of the tmux pane, if it runs in tmux
     var tmuxPath: String? = nil
-    var id: String { session.id }
+    /// the row's identity in the list (see `SessionSelection.rowIDs`); set once all rows are built
+    var id: String = ""
     var name: String { session.name }
 }
 
@@ -82,6 +83,11 @@ final class Store: ObservableObject {
     private var foundFolders: [String: String?] = [:]
 
     init() {
+        // a clicked notification shows its session (the terminal when it needs you)
+        Notifier.shared.open = { [weak self] name, tab in
+            self?.selected = name
+            if tab == .terminal { self?.focusTerminal() } else { self?.tab = tab }
+        }
         Task { await refresh() }
         let home = StateBuilder.defaultClaudeHome
         watcher = Watcher(paths: ["sessions", "handover", "projects"].map { "\(home)/\($0)" }, delay: 1) { [weak self] in
@@ -101,7 +107,12 @@ final class Store: ObservableObject {
         repeat {
             again = false
             let cache = transcripts
-            let (state, panes) = await Task.detached { (StateBuilder.build(cache: cache), Tmux.panes()) }.value
+            // plan limits only matter for a session standing at a limit; ~/.claude.json is read off the main thread
+            let (state, panes, planLimits) = await Task.detached { () -> (SessionsState, Tmux.Panes, PlanLimits?) in
+                let state = StateBuilder.build(cache: cache)
+                let limits = state.sessions.contains { $0.limitHit != nil } ? PlanLimits.load() : nil
+                return (state, Tmux.panes(), limits)
+            }.value
             let match = TmuxMatch.resolve(state.sessions, tmuxSessions: Set(panes.commands.keys),
                                           sessionOfPane: panes.sessionOfPane)
             var built = state.sessions.map { s -> Row in
@@ -116,7 +127,17 @@ final class Store: ObservableObject {
                 built.append(Row(session: s, status: Status(s, tmuxCommand: cmd), tmux: name, tmuxPath: panes.paths[name]))
             }
             built = SessionOrder.sorted(built, session: \.session, status: \.status.core, labels: [:])
-            if built != rows { rows = built }
+            // a row keeps its identity while Claude exits to the shell and starts again in the same tmux session
+            for (i, id) in SessionSelection.rowIDs(built.map { ($0.session.id, $0.tmux) }).enumerated() { built[i].id = id }
+            if built != rows {
+                // the selection follows its terminal (after /exit the shell row, after /rename the new name), and
+                // moves to the nearest row when the tmux session is gone, instead of falling back to the empty screen
+                let items = { (rows: [Row]) in rows.map { SessionSelection.Item(name: $0.name, tmux: $0.tmux) } }
+                let next = SessionSelection.follow(selected, before: items(rows), after: items(built))
+                rows = built
+                if next != selected { selected = next }
+            }
+            SubagentStore.shared.update(sessions: rows.map(\.session))
             let err = state.sessions.isEmpty && !state.errors.isEmpty ? state.errors.joined(separator: "\n") : nil
             if err != error { error = err }
             if !pickedInitial, !rows.isEmpty {
@@ -129,9 +150,9 @@ final class Store: ObservableObject {
             let t = Date()
             if t.timeIntervalSince(now) >= 10 { now = t }
             let settings = AppSettings.shared
-            // plan limits only matter for a session standing at a limit (and ~/.claude.json can be large)
-            let limits = rows.contains { $0.session.limitHit != nil } ? PlanLimits.load()?.droppingExpired(now: t) : nil
+            let limits = planLimits?.droppingExpired(now: t)
             AutoContinue.shared.update(rows: rows, limits: limits, settings: settings, now: t)
+            Notifier.shared.update(rows: rows, selected: selected, now: t)
             KeepAwake.shared.update(working: rows.filter { $0.status.rank == 1 }.count,
                                     waitingForReset: AutoContinue.shared.pending.values.filter(\.willContinue).count,
                                     settings: settings)
