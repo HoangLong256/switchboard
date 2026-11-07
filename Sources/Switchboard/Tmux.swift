@@ -38,7 +38,13 @@ enum Tmux {
 
     static var serverArgs: [String] { ["-L", socket, "-f", configPath] }
 
-    static func attachArgs(_ name: String) -> [String] { serverArgs + ["attach-session", "-t", target(name)] }
+    /// Sets the hyperlinks feature here, not in `config`: sessions outlive the app, so the server may have started
+    /// from an older config, and tmux drops OSC 8 links without it. A fixed index keeps repeat attaches from adding
+    /// entries, and `-q` keeps a tmux without this option from failing the attach.
+    static func attachArgs(_ name: String) -> [String] {
+        serverArgs + ["set-option", "-sq", "terminal-features[9]", "xterm-256color:hyperlinks", ";",
+                      "attach-session", "-t", target(name)]
+    }
 
     struct Panes: Equatable {
         /// tmux session → command running in front ("claude", "zsh", …)
