@@ -91,6 +91,8 @@ final class Store {
     @ObservationIgnored private var refreshing = false
     @ObservationIgnored private var again = false
     @ObservationIgnored private var pickedInitial = false
+    /// Names seen in the app's tmux server, so these sessions stay listed after they end
+    @ObservationIgnored private var startedInApp = Set(UserDefaults.standard.stringArray(forKey: "startedInApp") ?? [])
     /// start folders of offline sessions found in their transcripts (expensive, so once per name); tracked,
     /// because `folder(of:)` reads it in views
     private var foundFolders: [String: String?] = [:]
@@ -148,6 +150,12 @@ final class Store {
                 let s = Session(name: name, group: name, status: "shell")
                 built.append(Row(session: s, status: Status(s, tmuxCommand: cmd), tmux: name, tmuxPath: panes.paths[name]))
             }
+            let started = startedInApp.union(built.filter { $0.tmux != nil }.map(\.name))
+            if started != startedInApp {
+                startedInApp = started
+                UserDefaults.standard.set(started.sorted(), forKey: "startedInApp")
+            }
+            built = built.filter { $0.session.staysListed(inAppTmux: $0.tmux != nil, startedInApp: started) }
             built = SessionOrder.sorted(built, session: \.session, status: \.status.core, labels: [:])
             // a row keeps its identity while Claude exits to the shell and starts again in the same tmux session
             for (i, id) in SessionSelection.rowIDs(built.map { ($0.session.id, $0.tmux) }).enumerated() { built[i].id = id }

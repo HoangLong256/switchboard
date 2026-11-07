@@ -145,7 +145,7 @@ Switchboard shows it in three places:
 
 - The **Handover** tab shows the note.
 - The session row shows the task.
-- An offline session with a handover stays in the list. You can resume it.
+- An offline session with a handover stays in the list if it ran in Switchboard. You can resume it.
 
 ### Set up the handover
 

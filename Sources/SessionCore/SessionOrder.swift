@@ -9,6 +9,12 @@ extension Session {
     public var lastActivity: Date? {
         [lastAction?.at, statusUpdatedAt, task?.updatedAt].compactMap { $0.flatMap(parseISO) }.max()
     }
+
+    /// Whether the overview lists this session. Every session with a global handover instruction leaves a file
+    /// behind, so an ended session only stays if the app started it; its handover file is not touched.
+    public func staysListed(inAppTmux: Bool, startedInApp: Set<String>) -> Bool {
+        alive || inAppTmux || startedInApp.contains(name)
+    }
 }
 
 /// Order of sessions in the overview, same for all views.
